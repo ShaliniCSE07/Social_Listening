@@ -1,0 +1,28 @@
+# API plugin configuration
+reddit:
+  max_items: 200
+  request_timeout: 15
+  max_retries: 2
+  rate_limit_per_min: 60
+  token_url: "https://www.reddit.com/api/v1/access_token"
+  api_base_url: "https://oauth.reddit.com"
+
+google_places:
+  # Endpoints for Places API (New)
+  search_url: "https://places.googleapis.com/v1/places:searchText"
+  details_url_template: "https://places.googleapis.com/v1/places/{place_id}"
+
+  # Field masks for API requests
+  search_field_mask: "places.id,places.displayName"
+  details_field_mask: "displayName,formattedAddress,reviews"
+
+  # Costs in USD (verify against Google's current pricing)
+  cost_per_search_call: 0.032
+  cost_per_details_call: 0.017
+
+  # Timeouts & Retries
+  request_timeout: 15
+  max_retries: 2
+
+  # Cache TTL in days (default 0 = no caching; Google's terms limit storing Places content; confirm before raising it)
+  cache_ttl_days: 0.0

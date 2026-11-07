@@ -1,0 +1,27 @@
+companies:
+  Zomato:
+    alt_spellings: ["Zomato Ltd", "Eternal"]
+    handles: ["@zomato", "@zomatocare"]
+    branches: ["Gurugram HQ", "Indiranagar Bangalore"]
+    industry: "food_delivery"
+    api:
+      reddit_subreddits: ["india", "bangalore", "delhi"]
+      places_query: "Zomato office"
+    dataset:
+      dataset_name: "kaggle_zomato_reviews"
+    scraping:
+      allowed: false
+
+  Swiggy:
+    alt_spellings: ["Swiggy Instamart", "Bundl Technologies"]
+    handles: ["@swiggy", "@swiggy_in"]
+    branches: ["Bangalore HQ"]
+    industry: "food_delivery"
+    api:
+      reddit_subreddits: ["india", "bangalore"]
+      places_query: "Swiggy office"
+    dataset:
+      dataset_name: "kaggle_swiggy_reviews"
+    scraping:
+      allowed: false
+

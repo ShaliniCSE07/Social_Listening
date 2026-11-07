@@ -1,0 +1,8 @@
+# Dataset plugin configuration
+max_age_days: 30
+allowed_formats: ["csv", "json", "jsonl", "zip"]
+storage_dir: "data/raw"
+download_dir: "data/datasets/_downloads"
+max_download_mb: 50.0
+request_timeout: 30
+max_retries: 2

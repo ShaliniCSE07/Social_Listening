@@ -1,0 +1,7 @@
+# Scraping plugin configuration placeholder
+# Future keys for three-condition gate, user-agent rotation, and proxies
+min_results_threshold: 5
+request_timeout: 15
+user_agent_rotation: true
+robots_txt_strict: true
+

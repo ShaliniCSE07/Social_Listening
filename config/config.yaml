@@ -1,0 +1,10 @@
+budget_usd: 10.0
+thresholds:
+  min_mentions: 5
+  max_retries: 3
+output_paths:
+  raw: "data/raw"
+  processed: "data/processed"
+  checkpoints: "data/checkpoints"
+  output: "data/output"
+

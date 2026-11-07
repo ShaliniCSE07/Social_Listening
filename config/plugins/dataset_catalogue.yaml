@@ -1,0 +1,44 @@
+# Dataset Catalogue Configuration
+# Template:
+# datasets:
+#   <key>:
+#     name: "<Human-readable dataset title>"
+#     source_type: "local"  # local | url | kaggle
+#     path_or_ref: "data/datasets/filename.csv"
+#     format: "csv"         # csv | json | jsonl
+#     platform: "other"     # twitter_x | instagram | linkedin | reddit | google | facebook | news_blog | other
+#     content_type: "post"  # post | comment | reply | review | article
+#     enabled: true
+#     columns:
+#       text: "review_text" # required: mapped to content text for matching
+#       date: "review_date" # optional: date/time column
+#       id: "review_id"     # optional: unique record ID
+#       company: "brand"    # optional: target brand name
+#       rating: "stars"     # optional: rating score
+#       author: "user"      # optional: user or author name
+#       url: "source_url"   # optional: canonical URL
+#       branch: "location"  # optional: branch or branch name
+#     license_note: "Public Domain / CC0"
+#     last_updated_override: null  # Optional ISO string (e.g. "2026-01-01T00:00:00Z")
+
+datasets:
+  sample_reviews_local:
+    name: "Sample Offline Reviews"
+    source_type: "local"
+    path_or_ref: "data/datasets/sample_reviews.csv"
+    format: "csv"
+    platform: "other"
+    content_type: "review"
+    enabled: true
+    columns:
+      text: "text"
+      date: "date"
+      id: "id"
+      company: "company"
+      rating: "rating"
+      author: "author"
+      url: "url"
+      branch: "branch"
+    license_note: "Internal synthetic test dataset"
+    last_updated_override: null
+
