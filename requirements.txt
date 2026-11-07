@@ -4,4 +4,7 @@ pyyaml
 requests
 pytest
 kaggle
+fastapi
+uvicorn
+httpx
 

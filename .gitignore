@@ -16,3 +16,5 @@ data/output/*
 !data/output/.gitkeep
 data/cache/
 data/datasets/_downloads/
+data/runs/
+

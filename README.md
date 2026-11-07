@@ -39,6 +39,14 @@ A modular social media listening and sentiment analytics platform built in Pytho
 └── docs/                    # Architecture and handoff specifications
 ```
 
+## Running the API Service
+
+Start the FastAPI service:
+
+```bash
+uvicorn src.service.main:app --reload --port 8000
+```
+
 ## Running Tests
 
 Install required dependencies:

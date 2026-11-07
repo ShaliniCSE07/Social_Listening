@@ -1,4 +1,6 @@
 budget_usd: 10.0
+cors_origins:
+  - "http://localhost:3000"
 thresholds:
   min_mentions: 5
   max_retries: 3
