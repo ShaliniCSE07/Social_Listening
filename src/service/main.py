@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config.settings import load_config
 from src.service.models import HealthResponse
 from src.service.routes.config import router as config_router
-from src.service.routes.runs import router as runs_router
+from src.service.routes.runs import plan_router, router as runs_router
 
 app = FastAPI(
     title="Social Listening Collection Service",
@@ -27,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(config_router)
+app.include_router(plan_router)
 app.include_router(runs_router)
 
 

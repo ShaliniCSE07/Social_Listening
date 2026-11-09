@@ -61,11 +61,15 @@ class RunStore:
                     "created_at": data.get("created_at", ""),
                     "started_at": data.get("started_at"),
                     "finished_at": data.get("finished_at"),
+                    "error": data.get("error"),
                     "companies": data.get("companies", []),
                     "progress": data.get("progress", {}),
                     "counts": data.get("counts", {}),
                     "budget_snapshot": data.get("budget_snapshot", {}),
                     "per_source_results": data.get("per_source_results", {}),
+                    "task_outcomes": data.get("task_outcomes"),
+                    "decisions": data.get("decisions"),
+                    "invalid_companies": data.get("invalid_companies"),
                 }
         except Exception:
             return None
@@ -193,6 +197,14 @@ class RunStore:
                 or m.get("collected_at")
             )
 
+            fb = m.get("fallback_from")
+            if hasattr(fb, "value"):
+                fb_str = fb.value
+            elif fb is not None:
+                fb_str = str(fb)
+            else:
+                fb_str = None
+
             compact_items.append(
                 {
                     "platform": m.get("platform", "other"),
@@ -202,6 +214,7 @@ class RunStore:
                     "url": m.get("url"),
                     "method": m.get("method_used", ""),
                     "cost": m.get("cost_usd", 0.0),
+                    "fallback_from": fb_str,
                 }
             )
 

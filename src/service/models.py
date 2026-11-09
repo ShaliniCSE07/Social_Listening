@@ -27,18 +27,22 @@ class DatasetConfigItem(BaseModel):
 
 
 class CompanyInput(BaseModel):
-    name: str
+    name: str = ""
     alt_spellings: Optional[List[str]] = Field(default_factory=list)
     handles: List[str] = Field(default_factory=list)
     branches: Optional[List[str]] = Field(default_factory=list)
     industry: Optional[str] = None
+    platforms: Optional[List[str]] = None
+    dataset_keys: Optional[List[str]] = None
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+    budget_usd: Optional[float] = None
+    scraping_allowed: Optional[bool] = None
 
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("Company name is required and cannot be empty")
-        return v.strip()
+        return v.strip() if v else ""
 
 
 class SourcesInput(BaseModel):
@@ -56,6 +60,7 @@ class CreateRunRequest(BaseModel):
     max_age_days: Optional[float] = None
     require_fresh: Optional[bool] = None
     refresh: Optional[bool] = None
+    scraping_allowed: Optional[bool] = False
 
     @field_validator("companies")
     @classmethod
@@ -96,6 +101,9 @@ class RunDetailResponse(BaseModel):
     counts: RunTotals
     budget_snapshot: Dict[str, Any] = Field(default_factory=dict)
     per_source_results: Dict[str, Any] = Field(default_factory=dict)
+    task_outcomes: Optional[List[Dict[str, Any]]] = None
+    decisions: Optional[List[Dict[str, Any]]] = None
+    invalid_companies: Optional[List[Dict[str, Any]]] = None
 
 
 class CompactMention(BaseModel):
@@ -106,6 +114,16 @@ class CompactMention(BaseModel):
     url: Optional[str] = None
     method: str
     cost: float = 0.0
+    fallback_from: Optional[str] = None
+
+
+class PlanResponse(BaseModel):
+    valid_companies: List[str] = Field(default_factory=list)
+    invalid_companies: List[Dict[str, Any]] = Field(default_factory=list)
+    decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    notes: List[str] = Field(default_factory=list)
+    valid: Optional[List[str]] = None
+    invalid: Optional[List[Dict[str, Any]]] = None
 
 
 class PaginatedMentionsResponse(BaseModel):

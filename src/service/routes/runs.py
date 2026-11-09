@@ -6,20 +6,99 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
+from src.collection.agent import plan_decisions
 from src.collection.budget import BudgetTracker
+from src.collection.planner import Planner
 from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
 from src.contracts.enums import Platform
 from src.service.models import (
     CreateRunRequest,
     CreateRunResponse,
     PaginatedMentionsResponse,
+    PlanResponse,
     RunDetailResponse,
     RunListItem,
 )
 from src.service.run_store import run_store
-from src.service.runner import default_runner
+from src.service.runner import default_runner, sanitize_obj
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
+plan_router = APIRouter(tags=["plan"])
+
+
+def _generate_plan(request: CreateRunRequest) -> PlanResponse:
+    """Generate collection plan and agent decisions without network calls or collection."""
+    planner_input = {
+        "companies": [
+            {
+                "name": c.name,
+                "alt_spellings": c.alt_spellings or [],
+                "handles": c.handles or [],
+                "branches": c.branches or [],
+                "industry": c.industry,
+                "platforms": getattr(c, "platforms", None),
+                "dataset_keys": getattr(c, "dataset_keys", None),
+                "date_from": getattr(c, "date_from", None),
+                "date_to": getattr(c, "date_to", None),
+                "budget_usd": getattr(c, "budget_usd", None),
+                "scraping_allowed": getattr(c, "scraping_allowed", None),
+            }
+            for c in request.companies
+        ],
+        "date_from": request.date_from,
+        "date_to": request.date_to,
+        "budget_usd": request.budget_usd,
+        "max_age_days": (
+            float(request.max_age_days)
+            if request.max_age_days is not None
+            else None
+        ),
+        "require_fresh": bool(request.require_fresh),
+        "refresh": bool(getattr(request, "refresh", False)),
+        "scraping_allowed": bool(getattr(request, "scraping_allowed", False)),
+    }
+    if request.sources:
+        if request.sources.api is not None:
+            planner_input["platforms"] = list(request.sources.api)
+        if request.sources.dataset_keys is not None:
+            planner_input["dataset_keys"] = list(request.sources.dataset_keys)
+
+    planner = Planner()
+    plan_obj = planner.plan(planner_input)
+
+    tracker = BudgetTracker(limit_usd=request.budget_usd) if request.budget_usd is not None else None
+    decisions = plan_decisions(plan_obj, registry=None, budget=tracker)
+
+    decisions_data = [d.to_dict() for d in decisions]
+    sanitized_decisions = sanitize_obj(decisions_data)
+
+    valid_names = [r.company for r in plan_obj.requests]
+    invalid_data = [
+        {"name": inv.name, "reasons": inv.reasons}
+        if hasattr(inv, "name") else dict(inv)
+        for inv in plan_obj.invalid
+    ]
+
+    return PlanResponse(
+        valid_companies=valid_names,
+        invalid_companies=invalid_data,
+        valid=valid_names,
+        invalid=invalid_data,
+        decisions=sanitized_decisions,
+        notes=plan_obj.notes,
+    )
+
+
+@plan_router.post("/api/plan", response_model=PlanResponse)
+def plan_collection(request: CreateRunRequest) -> PlanResponse:
+    """Generate collection plan and agent decisions without network calls or collection."""
+    return _generate_plan(request)
+
+
+@router.post("/plan", response_model=PlanResponse)
+def plan_collection_alias(request: CreateRunRequest) -> PlanResponse:
+    """Alias for POST /api/plan under /api/runs/plan."""
+    return _generate_plan(request)
 
 VALID_PLATFORMS = {p.value for p in Platform}
 

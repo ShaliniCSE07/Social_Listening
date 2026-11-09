@@ -529,3 +529,269 @@ def test_require_fresh_omitted_becomes_false(monkeypatch, tmp_path):
     assert len(captured_requests) == 1
     assert captured_requests[0].require_fresh is False
     assert isinstance(captured_requests[0].require_fresh, bool)
+
+
+def test_post_api_plan_returns_decisions_and_never_leaks_key(client, monkeypatch):
+    """POST /api/plan returns valid/invalid companies and agent decisions without leaking secrets."""
+    secret_token = "secret_x_token_999999"
+    monkeypatch.setenv("REDDIT_CLIENT_SECRET", secret_token)
+    monkeypatch.setenv("REDDIT_CLIENT_ID", "reddit_client_id_12345")
+
+    payload = {
+        "companies": [{"name": "Zomato", "alt_spellings": ["Zomato Ltd"]}],
+        "sources": {"api": ["reddit", "google"]},
+        "budget_usd": 25.0,
+    }
+
+    # Test /api/plan endpoint
+    resp = client.post("/api/plan", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["valid_companies"] == ["Zomato"]
+    assert data["invalid_companies"] == []
+    assert len(data["decisions"]) >= 2
+
+    # Check decision shape: task, candidates, rejected, summary
+    for dec in data["decisions"]:
+        assert "task" in dec
+        assert "candidates" in dec
+        assert "rejected" in dec
+        assert "summary" in dec
+        assert isinstance(dec["candidates"], list)
+        assert isinstance(dec["rejected"], list)
+
+    # Verify secrets are NOT leaked in response body
+    assert secret_token not in resp.text
+    assert "reddit_client_id_12345" not in resp.text
+
+    # Test /api/runs/plan alias
+    alias_resp = client.post("/api/runs/plan", json=payload)
+    assert alias_resp.status_code == 200
+    assert alias_resp.json()["valid_companies"] == ["Zomato"]
+
+
+def test_run_fallback_sets_fallback_from_on_mentions(client, monkeypatch, tmp_path):
+    """When a primary candidate fails and fallback candidate succeeds, fallback_from is set on mentions."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.runner.run_store", custom_store)
+    monkeypatch.setattr("src.service.routes.runs.run_store", custom_store)
+
+    class MockFailingFirstReddit(BaseConnector):
+        method: ClassVar[Method] = Method.api
+        name: ClassVar[str] = "reddit_api"
+        platforms: ClassVar[List[Platform]] = [Platform.reddit]
+
+        def can_run(self, request: CollectionRequest) -> Tuple[bool, str]:
+            return True, "OK"
+
+        def estimate_cost(self, request: CollectionRequest) -> float:
+            return 0.0
+
+        def collect(self, request: CollectionRequest) -> Tuple[List[RawMention], CollectionAttempt]:
+            now = datetime.now(timezone.utc)
+            return [], CollectionAttempt(
+                company=request.company,
+                platform=Platform.reddit,
+                method=self.method,
+                status=AttemptStatus.failed,
+                reason="Primary Reddit API down",
+                item_count=0,
+                cost_usd=0.0,
+                started_at=now,
+                finished_at=now,
+            )
+
+    class MockBackupReddit(BaseConnector):
+        method: ClassVar[Method] = Method.api
+        name: ClassVar[str] = "third_party_reddit"
+        platforms: ClassVar[List[Platform]] = [Platform.reddit]
+
+        def can_run(self, request: CollectionRequest) -> Tuple[bool, str]:
+            return True, "OK"
+
+        def estimate_cost(self, request: CollectionRequest) -> float:
+            return 0.0
+
+        def collect(self, request: CollectionRequest) -> Tuple[List[RawMention], CollectionAttempt]:
+            now = datetime.now(timezone.utc)
+            m = make_mention(
+                company=request.company,
+                platform=Platform.reddit,
+                item_id="mention_backup_1",
+                raw_payload={"text": "Mention from backup provider", "created_utc": "2026-03-01"},
+            )
+            att = CollectionAttempt(
+                company=request.company,
+                platform=Platform.reddit,
+                method=self.method,
+                status=AttemptStatus.success,
+                reason="Backup provider succeeded",
+                item_count=1,
+                cost_usd=0.0,
+                started_at=now,
+                finished_at=now,
+            )
+            return [m], att
+
+    from src.collection.policy import PolicyCandidate, SourcePolicy
+
+    custom_policy = SourcePolicy(
+        platforms={
+            "reddit": [
+                PolicyCandidate(connector="reddit_api", method="api", cost_class="free", role="first_choice", available=True),
+                PolicyCandidate(connector="third_party_reddit", method="api", cost_class="paid", role="backup", available=True),
+            ]
+        }
+    )
+
+    test_runner = RunRunner(
+        connector_classes=[MockFailingFirstReddit, MockBackupReddit],
+        policy=custom_policy,
+    )
+    req = CreateRunRequest(
+        companies=[CompanyInput(name="Zomato")],
+        sources=SourcesInput(api=["reddit"]),
+    )
+    summary = test_runner.run("run_fb_test", req)
+
+    # Check task outcomes recorded the fallback path
+    assert len(summary["task_outcomes"]) == 1
+    outcome = summary["task_outcomes"][0]
+    assert outcome["fallback_path"] == ["reddit_api", "third_party_reddit"]
+    assert outcome["chosen_method"] == "third_party_reddit"
+
+    # Query GET /api/runs/{id}/mentions compact view
+    resp = client.get("/api/runs/run_fb_test/mentions")
+    assert resp.status_code == 200
+    mentions_data = resp.json()
+    assert mentions_data["total"] == 1
+    first_item = mentions_data["items"][0]
+    assert first_item["fallback_from"] == "api"
+
+
+def test_run_with_one_invalid_company_processes_valid_ones(client, monkeypatch, tmp_path):
+    """A run with one invalid company still processes the valid companies, ending with status partial."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.runner.run_store", custom_store)
+    monkeypatch.setattr("src.service.routes.runs.run_store", custom_store)
+
+    test_runner = RunRunner(connector_classes=[MockSuccessConnector])
+
+    req = CreateRunRequest(
+        companies=[
+            CompanyInput(name="ValidCorp"),
+            CompanyInput(name="InvalidCorp", platforms=["unknown_platform_xyz"]),
+        ],
+        sources=SourcesInput(api=["reddit"]),
+    )
+    summary = test_runner.run("run_partial_invalid_test", req)
+
+    # Run should be partial because some succeeded and one was invalid
+    assert summary["status"] == "partial"
+    assert summary["counts"]["mentions_count"] >= 1
+    assert len(summary["invalid_companies"]) == 1
+    assert summary["invalid_companies"][0]["name"] == "InvalidCorp"
+
+    # Verify GET /api/runs/{run_id} returns invalid_companies
+    resp = client.get("/api/runs/run_partial_invalid_test")
+    assert resp.status_code == 200
+    detail = resp.json()
+    assert detail["status"] == "partial"
+    assert detail["invalid_companies"] is not None
+    assert detail["invalid_companies"][0]["name"] == "InvalidCorp"
+
+
+def test_run_statuses_completed_partial_failed(monkeypatch, tmp_path):
+    """Run statuses accurately reflect outcomes: completed (all ok), partial (some ok/some failed or invalid), failed (none ok)."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.runner.run_store", custom_store)
+
+    # 1. Completed
+    runner_ok = RunRunner(connector_classes=[MockSuccessConnector])
+    req_ok = CreateRunRequest(
+        companies=[CompanyInput(name="Acme")],
+        sources=SourcesInput(api=["reddit"]),
+    )
+    s_ok = runner_ok.run("run_completed", req_ok)
+    assert s_ok["status"] == "completed"
+
+    # 2. Partial (one success, one fail)
+    runner_partial = RunRunner(connector_classes=[MockSuccessConnector, MockFailConnector])
+    req_partial = CreateRunRequest(
+        companies=[CompanyInput(name="Acme")],
+        sources=SourcesInput(api=["reddit", "google"]),
+    )
+    s_partial = runner_partial.run("run_partial", req_partial)
+    assert s_partial["status"] == "partial"
+
+    # 3. Failed (all tasks fail)
+    runner_fail = RunRunner(connector_classes=[MockFailConnector])
+    req_fail = CreateRunRequest(
+        companies=[CompanyInput(name="Acme")],
+        sources=SourcesInput(api=["google"]),
+    )
+    s_fail = runner_fail.run("run_fail", req_fail)
+    assert s_fail["status"] == "failed"
+    assert s_fail.get("error") is not None
+
+    # 4. Failed when no valid companies
+    runner_no_valid = RunRunner(connector_classes=[MockSuccessConnector])
+    req_no_valid = CreateRunRequest(
+        companies=[CompanyInput(name="BadCo", platforms=["invalid_plat"])],
+        sources=SourcesInput(api=["reddit"]),
+    )
+    s_no_valid = runner_no_valid.run("run_no_valid", req_no_valid)
+    assert s_no_valid["status"] == "failed"
+    assert "No valid companies" in s_no_valid.get("error", "")
+
+
+def test_budget_reaches_tracker(client, monkeypatch, tmp_path):
+    """Budget passed in CreateRunRequest reaches the BudgetTracker and run summary."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.runner.run_store", custom_store)
+    monkeypatch.setattr("src.service.routes.runs.run_store", custom_store)
+
+    test_runner = RunRunner(connector_classes=[MockSuccessConnector])
+    req = CreateRunRequest(
+        companies=[CompanyInput(name="Acme")],
+        sources=SourcesInput(api=["reddit"]),
+        budget_usd=77.50,
+    )
+    summary = test_runner.run("run_budget_limit", req)
+    assert summary["budget_snapshot"]["limit_usd"] == 77.50
+
+    resp = client.get("/api/runs/run_budget_limit")
+    assert resp.status_code == 200
+    assert resp.json()["budget_snapshot"]["limit_usd"] == 77.50
+
+
+def test_older_run_summary_loads_without_new_fields(client, monkeypatch, tmp_path):
+    """Older run_summary.json without task_outcomes, decisions, or invalid_companies loads cleanly."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.routes.runs.run_store", custom_store)
+
+    # Older summary missing task_outcomes, decisions, invalid_companies
+    older_summary = {
+        "run_id": "older_run_123",
+        "status": "completed",
+        "created_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:01Z",
+        "finished_at": "2026-01-01T00:00:05Z",
+        "companies": ["OldCompany"],
+        "counts": {"mentions_count": 5, "attempts_count": 1, "cost_usd": 0.0},
+        "budget_snapshot": {"limit_usd": 10.0, "total_spent_usd": 0.0},
+        "progress": {},
+        "per_source_results": {},
+    }
+    custom_store.save_run_summary("older_run_123", older_summary)
+
+    resp = client.get("/api/runs/older_run_123")
+    assert resp.status_code == 200
+    detail = resp.json()
+    assert detail["id"] == "older_run_123"
+    assert detail["status"] == "completed"
+    assert detail["task_outcomes"] is None
+    assert detail["decisions"] is None
+    assert detail["invalid_companies"] is None
+
