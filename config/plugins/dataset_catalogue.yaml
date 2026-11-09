@@ -31,9 +31,9 @@ datasets:
     content_type: "review"
     enabled: true
     columns:
-      text: "text"
-      date: "date"
-      id: "id"
+      text: "review_text"
+      date: "review_date"
+      id: "review_id"
       company: "company"
       rating: "rating"
       author: "author"

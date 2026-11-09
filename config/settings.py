@@ -14,7 +14,7 @@ def load_yaml(path: Path) -> Dict[str, Any]:
     """Safely load a YAML file and return its dictionary representation."""
     if not path.is_file():
         return {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8-sig") as f:
         return yaml.safe_load(f) or {}
 
 

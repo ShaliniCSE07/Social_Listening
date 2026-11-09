@@ -4,9 +4,11 @@ cors_origins:
 thresholds:
   min_mentions: 5
   max_retries: 3
+collection:
+  min_results: 5
+  platform_min_results: {}
 output_paths:
   raw: "data/raw"
   processed: "data/processed"
   checkpoints: "data/checkpoints"
   output: "data/output"
-

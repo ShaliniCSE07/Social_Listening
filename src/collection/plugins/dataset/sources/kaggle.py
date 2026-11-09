@@ -9,43 +9,11 @@ from typing import Any, Dict, Iterator, Optional, Tuple, Union
 import zipfile
 
 from config.settings import load_plugin_config
+from src.collection.common.dates import to_utc
 from src.collection.plugins.dataset.sources.base import DatasetInfo, DatasetSource
 from src.collection.plugins.dataset.sources.local import LocalFileSource
 
 logger = logging.getLogger(__name__)
-
-
-def parse_date_safely(date_val: Any) -> Optional[datetime]:
-    """Parse date representations to a UTC timezone-aware datetime."""
-    if date_val is None:
-        return None
-    if isinstance(date_val, (int, float)):
-        try:
-            return datetime.fromtimestamp(float(date_val), tz=timezone.utc)
-        except Exception:
-            return None
-    date_str = str(date_val).strip()
-    if not date_str:
-        return None
-    try:
-        dt = datetime.fromisoformat(date_str)
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        for fmt in (
-            "%Y-%m-%d",
-            "%Y/%m/%d",
-            "%d-%m-%Y",
-            "%d/%m/%Y",
-            "%Y-%m-%d %H:%M:%S",
-        ):
-            try:
-                dt = datetime.strptime(date_str, fmt)
-                return dt.replace(tzinfo=timezone.utc)
-            except Exception:
-                continue
-    return None
 
 
 def sanitize_text(text: str) -> str:
@@ -194,7 +162,7 @@ class KaggleSource(DatasetSource):
                     )
                     raw_dt = getattr(match, "last_updated", None) or getattr(match, "lastUpdated", None)
                     if raw_dt:
-                        dt = raw_dt if isinstance(raw_dt, datetime) else parse_date_safely(raw_dt)
+                        dt = raw_dt if isinstance(raw_dt, datetime) else to_utc(raw_dt)
                     lic = getattr(match, "license_name", None) or getattr(match, "licenseName", None)
             except Exception as e:
                 logger.debug("dataset_list error: %s", sanitize_text(str(e)))
@@ -207,7 +175,7 @@ class KaggleSource(DatasetSource):
                     if not dt:
                         raw_dt = getattr(ds, "last_updated", None) or getattr(ds, "lastUpdated", None)
                         if raw_dt:
-                            dt = raw_dt if isinstance(raw_dt, datetime) else parse_date_safely(raw_dt)
+                            dt = raw_dt if isinstance(raw_dt, datetime) else to_utc(raw_dt)
                     if not lic:
                         lic = getattr(ds, "license_name", None) or getattr(ds, "licenseName", None) or getattr(ds, "license", None)
             except Exception as e:
@@ -227,15 +195,12 @@ class KaggleSource(DatasetSource):
                         if not dt:
                             raw_dt = meta_data.get("last_updated") or meta_data.get("lastUpdated")
                             if raw_dt:
-                                dt = parse_date_safely(raw_dt)
+                                dt = to_utc(raw_dt)
             except Exception as e:
                 logger.debug("dataset_metadata error: %s", sanitize_text(str(e)))
 
         if isinstance(dt, datetime):
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            else:
-                dt = dt.astimezone(timezone.utc)
+            dt = to_utc(dt)
 
         return dt, lic
 
@@ -252,7 +217,7 @@ class KaggleSource(DatasetSource):
                             if line.startswith("last_updated="):
                                 val = line.split("=", 1)[1].strip()
                                 if val:
-                                    self._meta_last_updated = datetime.fromisoformat(val)
+                                    self._meta_last_updated = to_utc(val)
                             elif line.startswith("license="):
                                 val = line.split("=", 1)[1].strip()
                                 if val:
@@ -328,7 +293,7 @@ class KaggleSource(DatasetSource):
         else:
             p = self.get_file_path()
             if p and p.is_file():
-                dt = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+                dt = to_utc(p.stat().st_mtime) or datetime.now(timezone.utc)
             else:
                 dt = datetime.now(timezone.utc)
 

@@ -28,7 +28,7 @@ def load_dataset_catalogue(path: Optional[Path] = None) -> Dict[str, DatasetEntr
     if not cat_path.is_file():
         return {}
 
-    with open(cat_path, "r", encoding="utf-8") as f:
+    with open(cat_path, "r", encoding="utf-8-sig") as f:
         data = yaml.safe_load(f) or {}
 
     raw_datasets = data.get("datasets", {})

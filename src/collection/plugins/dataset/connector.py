@@ -8,6 +8,7 @@ import requests
 
 from config.settings import load_plugin_config
 from src.collection.base import BaseConnector, CollectionRequest
+from src.collection.common.dates import to_utc
 from src.collection.common.text import matches_company
 from src.collection.plugins.dataset.catalogue import (
     DatasetEntry,
@@ -21,39 +22,6 @@ from src.contracts.enums import AttemptStatus, ContentType, Method, Platform
 from src.contracts.schemas import CollectionAttempt, RawMention
 
 logger = logging.getLogger(__name__)
-
-
-def parse_date_safely(date_val: Any) -> Optional[datetime]:
-    """Parse various date representations to a UTC timezone-aware datetime."""
-    if date_val is None:
-        return None
-    if isinstance(date_val, (int, float)):
-        try:
-            return datetime.fromtimestamp(float(date_val), tz=timezone.utc)
-        except Exception:
-            return None
-    date_str = str(date_val).strip()
-    if not date_str:
-        return None
-    try:
-        dt = datetime.fromisoformat(date_str)
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        for fmt in (
-            "%Y-%m-%d",
-            "%Y/%m/%d",
-            "%d-%m-%Y",
-            "%d/%m/%Y",
-            "%Y-%m-%d %H:%M:%S",
-        ):
-            try:
-                dt = datetime.strptime(date_str, fmt)
-                return dt.replace(tzinfo=timezone.utc)
-            except Exception:
-                continue
-    return None
 
 
 class DatasetConnector(BaseConnector):
@@ -138,7 +106,7 @@ class DatasetConnector(BaseConnector):
 
             last_updated_override: Optional[datetime] = None
             if entry.last_updated_override:
-                last_updated_override = parse_date_safely(entry.last_updated_override)
+                last_updated_override = to_utc(entry.last_updated_override)
 
             # Determine source: url, kaggle or local
             is_url_source = entry.source_type.lower() == "url"
@@ -266,7 +234,8 @@ class DatasetConnector(BaseConnector):
             )
 
             if request.require_fresh and max_age_days is not None and max_age_days > 0:
-                age_days = (now_utc - last_updated).total_seconds() / 86400.0
+                last_updated_utc = to_utc(last_updated) or now_utc
+                age_days = (now_utc - last_updated_utc).total_seconds() / 86400.0
                 if age_days > max_age_days:
                     ds_finish = datetime.now(timezone.utc)
                     reason_msg = f"dataset older than {max_age_days} days"
@@ -319,6 +288,11 @@ class DatasetConnector(BaseConnector):
             first_row = True
             row_num = 0
             read_error: Optional[str] = None
+            row_errors = 0
+            date_parse_warnings = 0
+            has_date_filter = bool(request.date_from or request.date_to)
+            filter_date_from = to_utc(request.date_from) if request.date_from else None
+            filter_date_to = to_utc(request.date_to) if request.date_to else None
 
             try:
                 for raw_row in row_iterator:
@@ -330,74 +304,84 @@ class DatasetConnector(BaseConnector):
                             break
                         first_row = False
 
-                    mapped = map_row(raw_row, entry.columns)
+                    try:
+                        mapped = map_row(raw_row, entry.columns)
 
-                    company_val = mapped.get("company")
-                    text_val = mapped.get("text") or ""
-                    search_target = str(company_val) if company_val is not None else str(text_val)
+                        company_val = mapped.get("company")
+                        text_val = mapped.get("text") or ""
+                        search_target = str(company_val) if company_val is not None else str(text_val)
 
-                    if not matches_company(
-                        search_target,
-                        request.company,
-                        request.alt_spellings,
-                        request.handles,
-                    ):
-                        continue
+                        if not matches_company(
+                            search_target,
+                            request.company,
+                            request.alt_spellings,
+                            request.handles,
+                        ):
+                            continue
 
-                    if request.date_from or request.date_to:
-                        row_dt = parse_date_safely(mapped.get("date"))
-                        if row_dt:
-                            if request.date_from and row_dt < request.date_from:
-                                continue
-                            if request.date_to and row_dt > request.date_to:
-                                continue
+                        payload = dict(raw_row)
 
-                    payload = dict(raw_row)
-                    payload["dataset_key"] = entry.key
-                    payload["dataset_last_updated"] = last_updated.isoformat()
-                    payload["dataset_last_updated_basis"] = basis_str
-                    payload["dataset_row_number"] = row_num
-                    if dataset_license:
-                        payload["dataset_license"] = dataset_license
+                        if has_date_filter:
+                            row_dt = to_utc(mapped.get("date"))
+                            if row_dt:
+                                if filter_date_from and row_dt < filter_date_from:
+                                    continue
+                                if filter_date_to and row_dt > filter_date_to:
+                                    continue
+                            else:
+                                # Date could not be parsed — keep the row but warn
+                                date_parse_warnings += 1
+                                payload["date_parse_warning"] = True
 
-                    item_id_val = mapped.get("id")
-                    item_id = str(item_id_val) if item_id_val is not None else None
+                        payload["dataset_key"] = entry.key
+                        payload["dataset_last_updated"] = last_updated.isoformat()
+                        payload["dataset_last_updated_basis"] = basis_str
+                        payload["dataset_row_number"] = row_num
+                        if dataset_license:
+                            payload["dataset_license"] = dataset_license
 
-                    url_val = mapped.get("url")
-                    url = str(url_val) if url_val is not None else None
+                        item_id_val = mapped.get("id")
+                        item_id = str(item_id_val) if item_id_val is not None else None
 
-                    branch_val = mapped.get("branch")
-                    branch = str(branch_val) if branch_val is not None else None
+                        url_val = mapped.get("url")
+                        url = str(url_val) if url_val is not None else None
 
-                    plat_enum = (
-                        Platform(entry.platform)
-                        if entry.platform in Platform.__members__
-                        else Platform.other
-                    )
-                    content_type_enum = (
-                        ContentType(entry.content_type)
-                        if entry.content_type in ContentType.__members__
-                        else ContentType.post
-                    )
+                        branch_val = mapped.get("branch")
+                        branch = str(branch_val) if branch_val is not None else None
 
-                    mention = RawMention(
-                        schema_version="1.0",
-                        company=request.company,
-                        run_id=request.run_id,
-                        platform=plat_enum,
-                        item_id=item_id,
-                        url=url,
-                        branch=branch,
-                        content_type_hint=content_type_enum,
-                        raw_payload=payload,
-                        source=entry.name,
-                        method_used=self.method,
-                        tool_used=f"Dataset: {entry.name}",
-                        fallback_from=None,
-                        cost_usd=0.0,
-                        collected_at=now_utc,
-                    )
-                    ds_mentions.append(mention)
+                        plat_enum = (
+                            Platform(entry.platform)
+                            if entry.platform in Platform.__members__
+                            else Platform.other
+                        )
+                        content_type_enum = (
+                            ContentType(entry.content_type)
+                            if entry.content_type in ContentType.__members__
+                            else ContentType.post
+                        )
+
+                        mention = RawMention(
+                            schema_version="1.0",
+                            company=request.company,
+                            run_id=request.run_id,
+                            platform=plat_enum,
+                            item_id=item_id,
+                            url=url,
+                            branch=branch,
+                            content_type_hint=content_type_enum,
+                            raw_payload=payload,
+                            source=entry.name,
+                            method_used=self.method,
+                            tool_used=f"Dataset: {entry.name}",
+                            fallback_from=None,
+                            cost_usd=0.0,
+                            collected_at=now_utc,
+                        )
+                        ds_mentions.append(mention)
+
+                    except Exception as row_err:
+                        row_errors += 1
+                        logger.debug("Row %d error in %s: %s", row_num, entry.name, row_err)
 
             except Exception as iter_err:
                 read_error = f"Error reading dataset row {row_num}: {iter_err}"
@@ -418,6 +402,12 @@ class DatasetConnector(BaseConnector):
             else:
                 status = AttemptStatus.success
                 reason_parts.append(f"Collected {len(ds_mentions)} mentions from dataset {entry.name}")
+
+            if row_errors > 0:
+                reason_parts.append(f"{row_errors} rows had errors")
+
+            if date_parse_warnings > 0:
+                reason_parts.append(f"{date_parse_warnings} rows had unreadable dates")
 
             final_license = dataset_license or entry.license_note
             if final_license:

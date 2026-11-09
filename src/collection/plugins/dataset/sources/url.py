@@ -11,6 +11,7 @@ import zipfile
 import requests
 
 from config.settings import load_plugin_config
+from src.collection.common.dates import to_utc
 from src.collection.common.http import get_session
 from src.collection.plugins.dataset.sources.base import DatasetInfo, DatasetSource
 from src.collection.plugins.dataset.sources.local import LocalFileSource
@@ -101,11 +102,11 @@ class UrlSource(DatasetSource):
                             if line.startswith("last_modified="):
                                 lm_str = line.split("=", 1)[1].strip()
                                 if lm_str:
-                                    self._last_modified_header_dt = datetime.fromisoformat(lm_str)
+                                    self._last_modified_header_dt = to_utc(lm_str)
                             elif line.startswith("download_time="):
                                 dt_str = line.split("=", 1)[1].strip()
                                 if dt_str:
-                                    self._download_time = datetime.fromisoformat(dt_str)
+                                    self._download_time = to_utc(dt_str)
                 except Exception:
                     pass
             return cached, False

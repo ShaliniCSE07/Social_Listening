@@ -1,0 +1,161 @@
+# =============================================================================
+# Source Policy Configuration
+#
+# Defines ordered collection candidates per platform and global scraping gates.
+# Data-driven representation of the approach document's source selection matrix.
+# =============================================================================
+
+platforms:
+  twitter_x:
+    - connector: twitter_api
+      method: api
+      cost_class: paid
+      role: first_choice
+      available: false # not built: requires enterprise/paid X API subscription
+      notes: "Official Twitter/X API v2 (paid tier required)"
+    - connector: third_party_x
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party social data provider for Twitter/X"
+
+  reddit:
+    - connector: reddit_api
+      method: api
+      cost_class: free
+      role: first_choice
+      available: true
+      notes: "Official Reddit OAuth API"
+    - connector: third_party_reddit
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party Reddit data aggregator"
+
+  google:
+    - connector: google_business_profile
+      method: api
+      cost_class: approval
+      role: first_choice
+      available: false # off by default; requires Google enterprise verification
+      notes: "Google Business Profile API (requires business approval)"
+    - connector: google_places
+      method: api
+      cost_class: paid
+      role: backup
+      available: true
+      notes: "Google Places API (New) for location reviews"
+    - connector: third_party_reviews
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party review collection aggregator"
+
+  instagram:
+    - connector: instagram_graph_api
+      method: api
+      cost_class: approval
+      role: first_choice
+      available: false # not built; requires Meta App Review
+      notes: "Official Instagram Graph API"
+    - connector: third_party_instagram
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party Instagram data provider"
+    - connector: scraping
+      method: scraping
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Web scraping fallback (governed by scraping safety gate)"
+
+  facebook:
+    - connector: facebook_graph_api
+      method: api
+      cost_class: approval
+      role: first_choice
+      available: false # not built; requires Meta Business Verification
+      notes: "Official Facebook Graph API"
+    - connector: third_party_facebook
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party Facebook data provider"
+    - connector: scraping
+      method: scraping
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Web scraping fallback (governed by scraping safety gate)"
+
+  linkedin:
+    - connector: linkedin_api
+      method: api
+      cost_class: approval
+      role: first_choice
+      available: false # not built; requires LinkedIn Partner Program approval
+      notes: "Official LinkedIn Community Management API"
+    - connector: third_party_linkedin
+      method: api
+      cost_class: paid
+      role: backup
+      available: false # not built
+      notes: "Third-party LinkedIn data provider"
+    - connector: scraping
+      method: scraping
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Web scraping fallback (governed by scraping safety gate)"
+
+  news_blog:
+    # No first-choice connector exists (RSS was removed); open with supervisor.
+    - connector: dataset
+      method: dataset
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Offline news/article dataset catalog"
+    - connector: scraping
+      method: scraping
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Web scraping fallback (governed by scraping safety gate)"
+
+  history_baseline:
+    - connector: dataset
+      method: dataset
+      cost_class: free
+      role: first_choice
+      available: true
+      notes: "Historical baseline dataset catalog"
+
+  other:
+    - connector: dataset
+      method: dataset
+      cost_class: free
+      role: first_choice
+      available: true
+      notes: "Offline dataset catalog"
+    - connector: scraping
+      method: scraping
+      cost_class: free
+      role: backup
+      available: true
+      notes: "Web scraping fallback"
+
+scraping:
+  # Per-site flag for domains explicitly allowed for scraping
+  allows_scraping: false # default false
+  allowed_sites: [] # empty list of sites
+  # Minimum results threshold before fallback to scraping is considered
+  # Default from global pipeline config; pending supervisor verification
+  min_results_threshold: 5
+

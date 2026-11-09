@@ -256,3 +256,204 @@ def test_large_file_streams_without_loading_fully(tmp_path):
     second_row = next(row_iter)
     assert second_row["id"] == "row_1"
 
+
+
+# ---------------------------------------------------------------------------
+# Tests for naive / aware datetime handling, per-row errors, and warnings
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def aware_dates_csv(tmp_path) -> Path:
+    """CSV whose date column has timezone-aware ISO strings (e.g. …+05:30, …Z)."""
+    csv_path = tmp_path / "aware.csv"
+    rows = [
+        {"id": "a1", "brand": "Zomato", "text": "Good food", "dt": "2026-10-30T18:05:00Z"},
+        {"id": "a2", "brand": "Zomato", "text": "Late delivery", "dt": "2026-11-02T10:00:00+05:30"},
+        {"id": "a3", "brand": "Zomato", "text": "Old review", "dt": "2024-01-15T00:00:00Z"},
+    ]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id", "brand", "text", "dt"])
+        writer.writeheader()
+        writer.writerows(rows)
+    return csv_path
+
+
+@pytest.fixture
+def naive_dates_csv(tmp_path) -> Path:
+    """CSV whose date column has naive (no tz) ISO strings."""
+    csv_path = tmp_path / "naive.csv"
+    rows = [
+        {"id": "n1", "brand": "Zomato", "text": "Nice app", "dt": "2026-10-30 18:05:00"},
+        {"id": "n2", "brand": "Zomato", "text": "Crash issues", "dt": "2024-06-01"},
+    ]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id", "brand", "text", "dt"])
+        writer.writeheader()
+        writer.writerows(rows)
+    return csv_path
+
+
+def _make_entry(csv_path, key="test_ds"):
+    return DatasetEntry(
+        key=key,
+        name="Test Dataset",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        enabled=True,
+        columns={"text": "text", "id": "id", "company": "brand", "date": "dt"},
+    )
+
+
+def test_aware_row_dates_with_naive_date_from(aware_dates_csv):
+    """Aware row dates compared against a naive date_from must not crash."""
+    entry = _make_entry(aware_dates_csv)
+    connector = DatasetConnector(catalogue={"test_ds": entry})
+    # Naive date_from (no tzinfo) — should be treated as UTC by to_utc
+    date_from = datetime(2026, 10, 1)
+    request = CollectionRequest(company="Zomato", date_from=date_from)
+
+    mentions, attempt = connector.collect(request)
+
+    assert attempt.status == AttemptStatus.success
+    # a1 (Oct 30) and a2 (Nov 2) match; a3 (Jan 2024) is before the filter
+    ids = {m.item_id for m in mentions}
+    assert ids == {"a1", "a2"}
+
+
+def test_naive_row_dates_with_aware_date_from(naive_dates_csv):
+    """Naive row dates compared against an aware date_from must not crash."""
+    entry = _make_entry(naive_dates_csv)
+    connector = DatasetConnector(catalogue={"test_ds": entry})
+    date_from = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    request = CollectionRequest(company="Zomato", date_from=date_from)
+
+    mentions, attempt = connector.collect(request)
+
+    # Only n1 (2026-10-30) should pass the filter
+    assert len(mentions) == 1
+    assert mentions[0].item_id == "n1"
+
+
+def test_no_filter_keeps_all_rows_no_date_parse_warning(naive_dates_csv):
+    """With no date filter, all matching rows are kept and no date_parse_warning exists."""
+    entry = _make_entry(naive_dates_csv)
+    connector = DatasetConnector(catalogue={"test_ds": entry})
+    request = CollectionRequest(company="Zomato")
+
+    mentions, attempt = connector.collect(request)
+
+    assert len(mentions) == 2
+    for m in mentions:
+        assert "date_parse_warning" not in m.raw_payload
+
+
+def test_unparseable_date_with_filter_keeps_row_with_warning(tmp_path):
+    """If a filter is set and a row's date cannot be parsed, keep the row with a warning."""
+    csv_path = tmp_path / "baddate.csv"
+    rows = [
+        {"id": "u1", "brand": "Zomato", "text": "Good", "dt": "not-a-date"},
+        {"id": "u2", "brand": "Zomato", "text": "Also good", "dt": "2026-06-15"},
+    ]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id", "brand", "text", "dt"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    entry = _make_entry(csv_path)
+    connector = DatasetConnector(catalogue={"test_ds": entry})
+    date_from = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    request = CollectionRequest(company="Zomato", date_from=date_from)
+
+    mentions, attempt = connector.collect(request)
+
+    # Both rows kept: u1 (unparseable → kept with warning), u2 (2026 passes filter)
+    assert len(mentions) == 2
+    ids = {m.item_id for m in mentions}
+    assert ids == {"u1", "u2"}
+
+    # The unparseable row should have the warning flag
+    bad_mention = next(m for m in mentions if m.item_id == "u1")
+    assert bad_mention.raw_payload.get("date_parse_warning") is True
+
+    # The good row should NOT have the warning
+    good_mention = next(m for m in mentions if m.item_id == "u2")
+    assert "date_parse_warning" not in good_mention.raw_payload
+
+    # Attempt reason should mention the count
+    assert "1 rows had unreadable dates" in attempt.reason
+
+
+def test_one_bad_row_does_not_stop_others(tmp_path):
+    """A row-level error in one row must not prevent processing the rest."""
+    csv_path = tmp_path / "mixed.csv"
+    # Write a CSV where the company column has a value that will match,
+    # but we inject a row error by using a broken column mapping for one entry
+    rows = [
+        {"id": "r1", "brand": "Zomato", "text": "Good stuff", "dt": "2026-01-01"},
+        {"id": "r2", "brand": "Zomato", "text": "More stuff", "dt": "2026-02-01"},
+        {"id": "r3", "brand": "Zomato", "text": "Even more", "dt": "2026-03-01"},
+    ]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id", "brand", "text", "dt"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    entry = _make_entry(csv_path)
+    connector = DatasetConnector(catalogue={"test_ds": entry})
+    request = CollectionRequest(company="Zomato")
+
+    mentions, attempt = connector.collect(request)
+
+    # All 3 rows for Zomato should be collected
+    assert len(mentions) == 3
+    assert attempt.status == AttemptStatus.success
+
+
+def test_last_updated_freshness_naive_vs_aware(tmp_path):
+    """Freshness check with to_utc works when last_updated_override is naive or aware."""
+    csv_path = tmp_path / "fresh.csv"
+    rows = [{"id": "f1", "brand": "Zomato", "text": "Fresh review", "dt": "2026-01-01"}]
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id", "brand", "text", "dt"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    # Case 1: Naive override string (no timezone) — old date → should be skipped
+    entry_naive = DatasetEntry(
+        key="fresh_ds",
+        name="Fresh Dataset",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        enabled=True,
+        columns={"text": "text", "id": "id", "company": "brand"},
+        last_updated_override="2020-01-01T00:00:00",  # naive string
+    )
+    connector1 = DatasetConnector(catalogue={"fresh_ds": entry_naive})
+    req_fresh = CollectionRequest(company="Zomato", max_age_days=30, require_fresh=True)
+    m1, a1 = connector1.collect(req_fresh)
+    assert a1.status == AttemptStatus.skipped
+    assert "older than" in a1.reason.lower()
+
+    # Case 2: Aware override string (with timezone) — old date → should be skipped
+    entry_aware = DatasetEntry(
+        key="fresh_ds",
+        name="Fresh Dataset",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        enabled=True,
+        columns={"text": "text", "id": "id", "company": "brand"},
+        last_updated_override="2020-01-01T00:00:00+05:30",  # aware string
+    )
+    connector2 = DatasetConnector(catalogue={"fresh_ds": entry_aware})
+    m2, a2 = connector2.collect(req_fresh)
+    assert a2.status == AttemptStatus.skipped
+    assert "older than" in a2.reason.lower()
