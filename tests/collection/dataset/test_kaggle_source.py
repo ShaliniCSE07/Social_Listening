@@ -440,3 +440,62 @@ def test_kaggle_credentials_never_leaked(monkeypatch, tmp_path):
     assert secret_key not in attempt.reason
     assert "[REDACTED]" in attempt.reason
 
+
+def test_kaggle_download_size_limit_exceeded(monkeypatch, tmp_path):
+    """When downloaded file exceeds max_download_mb, attempt fails and files are cleaned up."""
+    monkeypatch.setenv("KAGGLE_USERNAME", "testuser")
+    monkeypatch.setenv("KAGGLE_KEY", "testkey")
+
+    def download_large_file(dataset, file_name, path):
+        target = Path(path) / "large.zip"
+        target.write_bytes(b"0" * (2 * 1024 * 1024))  # 2MB
+
+    mock_api = MockKaggleApi(download_action=download_large_file)
+    dl_dir = tmp_path / "downloads"
+    source = KaggleSource(
+        name="Large Kaggle",
+        key="large_kaggle",
+        ref="owner/large-dataset",
+        file_format="csv",
+        download_dir=dl_dir,
+        api=mock_api,
+    )
+    source.max_download_mb = 1.0  # Limit 1MB
+
+    with pytest.raises(ValueError) as exc_info:
+        source.download_if_needed()
+    assert "exceeded maximum limit" in str(exc_info.value)
+    # Ensure partial download deleted
+    assert not (dl_dir / "large_kaggle" / "large.zip").exists()
+
+
+def test_kaggle_unpacked_size_limit_exceeded(monkeypatch, tmp_path):
+    """When unpacked archive exceeds max_unpacked_mb, attempt fails and files are cleaned up."""
+    monkeypatch.setenv("KAGGLE_USERNAME", "testuser")
+    monkeypatch.setenv("KAGGLE_KEY", "testkey")
+
+    def download_huge_zip(dataset, file_name, path):
+        import zipfile
+        target = Path(path) / "huge.zip"
+        with zipfile.ZipFile(target, "w") as zf:
+            zf.writestr("huge.csv", "a" * (2 * 1024 * 1024))  # 2MB uncompressed
+
+    mock_api = MockKaggleApi(download_action=download_huge_zip)
+    dl_dir = tmp_path / "downloads"
+    source = KaggleSource(
+        name="Huge Kaggle",
+        key="huge_kaggle",
+        ref="owner/huge-dataset",
+        file_format="csv",
+        download_dir=dl_dir,
+        api=mock_api,
+    )
+    source.max_download_mb = 10.0
+    source.max_unpacked_mb = 1.0  # Limit 1MB uncompressed
+
+    with pytest.raises(ValueError) as exc_info:
+        source.download_if_needed()
+    assert "Unpacked dataset size exceeded maximum limit" in str(exc_info.value)
+    assert not (dl_dir / "huge_kaggle" / "huge.csv").exists()
+
+

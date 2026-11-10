@@ -66,6 +66,8 @@ class KaggleSource(DatasetSource):
             self.file_name = file_name
 
         cfg = load_plugin_config("dataset")
+        self.max_download_mb: float = float(cfg.get("max_download_mb", 200.0))
+        self.max_unpacked_mb: float = float(cfg.get("max_unpacked_mb", 400.0))
         base_dl_dir = download_dir or Path(cfg.get("download_dir", "data/datasets/_downloads"))
         self.target_dir = Path(base_dl_dir) / key
         self.target_dir.mkdir(parents=True, exist_ok=True)
@@ -73,6 +75,19 @@ class KaggleSource(DatasetSource):
         self._meta_last_updated: Optional[datetime] = None
         self._meta_license: Optional[str] = None
         self._local_file_path: Optional[Path] = None
+        self._local_source: Optional[LocalFileSource] = None
+
+    def _cleanup_target_dir(self) -> None:
+        """Remove partial or oversized files from target directory."""
+        try:
+            for p in self.target_dir.glob("*"):
+                if p.is_file():
+                    p.unlink(missing_ok=True)
+                elif p.is_dir():
+                    import shutil
+                    shutil.rmtree(p, ignore_errors=True)
+        except Exception:
+            pass
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:
@@ -257,13 +272,57 @@ class KaggleSource(DatasetSource):
         except Exception as exc:
             raise exc
 
+        # Enforce download size limit on archives/files
+        max_dl_bytes = self.max_download_mb * 1024 * 1024
+        max_unpacked_bytes = self.max_unpacked_mb * 1024 * 1024
+
+        for zpath in list(self.target_dir.glob("*.zip")):
+            if zpath.stat().st_size > max_dl_bytes:
+                self._cleanup_target_dir()
+                raise ValueError(
+                    f"Dataset download size exceeded maximum limit of {self.max_download_mb} MB"
+                )
+
+        non_zips = [
+            p
+            for p in self.target_dir.glob("*")
+            if p.is_file() and not p.name.endswith(".zip") and not p.name.endswith(".meta")
+        ]
+        if not list(self.target_dir.glob("*.zip")) and sum(p.stat().st_size for p in non_zips) > max_dl_bytes:
+            self._cleanup_target_dir()
+            raise ValueError(
+                f"Dataset download size exceeded maximum limit of {self.max_download_mb} MB"
+            )
+
         # Unpack any downloaded zip files
         for zpath in list(self.target_dir.glob("*.zip")):
+            oversized = False
             try:
                 with zipfile.ZipFile(zpath, "r") as zf:
-                    zf.extractall(self.target_dir)
+                    total_uncompressed = sum(info.file_size for info in zf.infolist())
+                    if total_uncompressed > max_unpacked_bytes:
+                        oversized = True
+                    else:
+                        zf.extractall(self.target_dir)
             except Exception:
                 pass
+
+            if oversized:
+                self._cleanup_target_dir()
+                raise ValueError(
+                    f"Unpacked dataset size exceeded maximum limit of {self.max_unpacked_mb} MB"
+                )
+
+        unpacked_size = sum(
+            p.stat().st_size
+            for p in self.target_dir.rglob("*")
+            if p.is_file() and not p.name.endswith(".zip") and not p.name.endswith(".meta")
+        )
+        if unpacked_size > max_unpacked_bytes:
+            self._cleanup_target_dir()
+            raise ValueError(
+                f"Unpacked dataset size exceeded maximum limit of {self.max_unpacked_mb} MB"
+            )
 
         downloaded_file = self.get_file_path()
         if not downloaded_file or not downloaded_file.is_file():
@@ -314,18 +373,26 @@ class KaggleSource(DatasetSource):
         file_path = self.get_file_path()
         if not file_path or not file_path.is_file():
             raise FileNotFoundError(f"Kaggle dataset file not found in {self.target_dir}")
-        local_src = LocalFileSource(
+        self._local_source = LocalFileSource(
             name=self.name,
             path=file_path,
             file_format=self.file_format,
             license_note=self.license_note,
             last_updated_override=self.last_updated_override,
         )
-        yield from local_src.iter_rows()
+        yield from self._local_source.iter_rows()
+
+    @property
+    def decode_errors(self) -> int:
+        if self._local_source is not None:
+            return self._local_source.decode_errors
+        return 0
 
     def format_error_reason(self, exc: Exception) -> str:
         msg = str(exc)
         err_lower = msg.lower()
+        if "exceeded maximum limit" in err_lower or "limit of" in err_lower:
+            return sanitize_text(msg)
         if (
             "401" in err_lower
             or "403" in err_lower

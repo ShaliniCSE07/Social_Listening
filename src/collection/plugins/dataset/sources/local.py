@@ -9,6 +9,17 @@ from src.collection.common.dates import to_utc
 from src.collection.plugins.dataset.sources.base import DatasetInfo, DatasetSource
 
 
+def get_file_encoding(path: Path) -> str:
+    """Return 'utf-8-sig' if file starts with a UTF-8 BOM, otherwise 'utf-8'."""
+    try:
+        with open(path, "rb") as f:
+            if f.read(3) == b"\xef\xbb\xbf":
+                return "utf-8-sig"
+    except Exception:
+        pass
+    return "utf-8"
+
+
 class LocalFileSource(DatasetSource):
     """Streams data rows from local files (CSV, JSON, JSONL)."""
 
@@ -25,6 +36,7 @@ class LocalFileSource(DatasetSource):
         self.file_format = file_format.lower()
         self.license_note = license_note
         self.last_updated_override = last_updated_override
+        self.decode_errors: int = 0
 
     def describe(self) -> DatasetInfo:
         if self.last_updated_override:
@@ -50,36 +62,77 @@ class LocalFileSource(DatasetSource):
         if not self.path.is_file():
             raise FileNotFoundError(f"Dataset file not found: {self.path}")
 
+        self.decode_errors = 0
+        encoding = get_file_encoding(self.path)
+
         if self.file_format == "csv":
             try:
-                with open(self.path, "r", encoding="utf-8", errors="replace") as f:
-                    reader = csv.DictReader(f)
+                with open(self.path, "rb") as f:
+                    first_line = f.readline()
+                    if not first_line:
+                        return
+                    try:
+                        header_line = first_line.decode(encoding)
+                    except UnicodeDecodeError as ude:
+                        raise ValueError(f"Failed to read CSV dataset: file header could not be decoded as UTF-8 ({ude})") from ude
+
+                    def _line_generator():
+                        yield header_line
+                        for raw_line in f:
+                            try:
+                                decoded_line = raw_line.decode(encoding)
+                                yield decoded_line
+                            except UnicodeDecodeError:
+                                self.decode_errors += 1
+                                continue
+
+                    reader = csv.DictReader(_line_generator())
                     for row in reader:
                         yield dict(row)
             except Exception as e:
                 if isinstance(e, FileNotFoundError):
                     raise
+                if "could not be decoded" in str(e) or "Failed to read CSV dataset" in str(e):
+                    raise
                 raise ValueError(f"Failed to read CSV dataset: {e}") from e
 
         elif self.file_format == "jsonl":
-            with open(self.path, "r", encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    line_str = line.strip()
-                    if line_str:
+            try:
+                with open(self.path, "rb") as f:
+                    first_line = True
+                    for raw_line in f:
+                        line_enc = encoding if first_line else "utf-8"
                         try:
-                            item = json.loads(line_str)
-                            if isinstance(item, dict):
-                                yield item
-                            else:
-                                yield {"_error": f"JSONL row is not an object: {type(item)}"}
-                        except Exception as e:
-                            yield {"_error": f"Corrupt JSON line: {e}"}
+                            line_str = raw_line.decode(line_enc).strip()
+                        except UnicodeDecodeError:
+                            self.decode_errors += 1
+                            continue
+                        finally:
+                            first_line = False
+
+                        if line_str:
+                            try:
+                                item = json.loads(line_str)
+                                if isinstance(item, dict):
+                                    yield item
+                                else:
+                                    yield {"_error": f"JSONL row is not an object: {type(item)}"}
+                            except Exception as e:
+                                yield {"_error": f"Corrupt JSON line: {e}"}
+            except Exception as e:
+                if isinstance(e, FileNotFoundError):
+                    raise
+                raise ValueError(f"Failed to read JSONL dataset: {e}") from e
 
         elif self.file_format == "json":
             try:
-                with open(self.path, "r", encoding="utf-8", errors="replace") as f:
+                with open(self.path, "r", encoding=encoding) as f:
                     data = json.load(f)
+            except UnicodeDecodeError as ude:
+                raise ValueError(f"Failed to decode JSON dataset {self.name}: file is unreadable ({ude})") from ude
             except Exception as e:
+                if isinstance(e, FileNotFoundError):
+                    raise
                 raise ValueError(f"Failed to parse JSON dataset: {e}") from e
 
             if isinstance(data, list):

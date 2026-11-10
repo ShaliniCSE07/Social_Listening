@@ -104,6 +104,31 @@ class DatasetConnector(BaseConnector):
         for entry in selected_entries:
             ds_start = datetime.now(timezone.utc)
 
+            has_company_col = bool(entry.columns.get("company"))
+            if not has_company_col and entry.default_company:
+                req_companies = [request.company] + (request.alt_spellings or [])
+                matches_default = any(
+                    c.strip().lower() == entry.default_company.strip().lower()
+                    for c in req_companies
+                    if c and isinstance(c, str)
+                )
+                if not matches_default:
+                    ds_finish = datetime.now(timezone.utc)
+                    attempts.append(
+                        CollectionAttempt(
+                            company=request.company,
+                            platform=Platform(entry.platform) if entry.platform in Platform.__members__ else Platform.other,
+                            method=self.method,
+                            status=AttemptStatus.empty,
+                            reason=f"dataset is for {entry.default_company}",
+                            item_count=0,
+                            cost_usd=0.0,
+                            started_at=ds_start,
+                            finished_at=ds_finish,
+                        )
+                    )
+                    continue
+
             last_updated_override: Optional[datetime] = None
             if entry.last_updated_override:
                 last_updated_override = to_utc(entry.last_updated_override)
@@ -139,6 +164,7 @@ class DatasetConnector(BaseConnector):
                     "key": entry.key,
                     "ref": entry.path_or_ref,
                     "file_format": entry.format,
+                    "file_name": entry.file,
                     "license_note": entry.license_note,
                     "last_updated_override": last_updated_override,
                     "refresh": getattr(request, "refresh", False),
@@ -296,6 +322,10 @@ class DatasetConnector(BaseConnector):
 
             try:
                 for raw_row in row_iterator:
+                    if raw_row.get("_error"):
+                        row_errors += 1
+                        continue
+
                     row_num += 1
                     if first_row:
                         validation_err = validate_mapping(raw_row, entry.columns)
@@ -307,17 +337,32 @@ class DatasetConnector(BaseConnector):
                     try:
                         mapped = map_row(raw_row, entry.columns)
 
-                        company_val = mapped.get("company")
-                        text_val = mapped.get("text") or ""
-                        search_target = str(company_val) if company_val is not None else str(text_val)
-
-                        if not matches_company(
-                            search_target,
-                            request.company,
-                            request.alt_spellings,
-                            request.handles,
-                        ):
-                            continue
+                        # Match determination:
+                        # 1. Mapped company column wins and default_company is ignored
+                        # 2. default_company: all rows belong to default_company
+                        # 3. Neither exists: match company name in text
+                        if has_company_col:
+                            company_val = mapped.get("company")
+                            if not matches_company(
+                                str(company_val) if company_val is not None else "",
+                                request.company,
+                                request.alt_spellings,
+                                request.handles,
+                            ):
+                                continue
+                            match_basis = "company_column"
+                        elif entry.default_company:
+                            match_basis = "default_company"
+                        else:
+                            text_val = mapped.get("text") or ""
+                            if not matches_company(
+                                str(text_val),
+                                request.company,
+                                request.alt_spellings,
+                                request.handles,
+                            ):
+                                continue
+                            match_basis = "text_mention"
 
                         payload = dict(raw_row)
 
@@ -337,11 +382,12 @@ class DatasetConnector(BaseConnector):
                         payload["dataset_last_updated"] = last_updated.isoformat()
                         payload["dataset_last_updated_basis"] = basis_str
                         payload["dataset_row_number"] = row_num
+                        payload["dataset_match_basis"] = match_basis
                         if dataset_license:
                             payload["dataset_license"] = dataset_license
 
                         item_id_val = mapped.get("id")
-                        item_id = str(item_id_val) if item_id_val is not None else None
+                        item_id = str(item_id_val).strip() if item_id_val is not None and str(item_id_val).strip() else None
 
                         url_val = mapped.get("url")
                         url = str(url_val) if url_val is not None else None
@@ -393,15 +439,23 @@ class DatasetConnector(BaseConnector):
             if download_note:
                 reason_parts.append(download_note)
 
+            decode_errors = getattr(source, "decode_errors", 0)
+
             if read_error:
                 status = AttemptStatus.failed
                 reason_parts.append(read_error)
+            elif row_num == 0 and decode_errors > 0:
+                status = AttemptStatus.failed
+                reason_parts.append(f"Failed to read dataset {entry.name}: file is unreadable ({decode_errors} bad rows had decode errors)")
             elif not ds_mentions:
                 status = AttemptStatus.empty
                 reason_parts.append(f"No matching mentions in dataset {entry.name}")
             else:
                 status = AttemptStatus.success
                 reason_parts.append(f"Collected {len(ds_mentions)} mentions from dataset {entry.name}")
+
+            if decode_errors > 0:
+                reason_parts.append(f"{decode_errors} bad rows had decode errors")
 
             if row_errors > 0:
                 reason_parts.append(f"{row_errors} rows had errors")

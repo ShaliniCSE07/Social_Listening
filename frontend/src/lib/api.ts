@@ -54,6 +54,61 @@ export interface CreateRunResponse {
   status: string;
 }
 
+export interface TaskOutcomeItem {
+  company: string;
+  platform: string;
+  chosen_method?: string | null;
+  fallback_path: string[];
+  total_items: number;
+  items?: number;
+  status: "ok" | "partial" | "failed" | string;
+  task?: {
+    company: string;
+    platform: string;
+  };
+}
+
+export interface InvalidCompanyItem {
+  name: string;
+  reasons: string[];
+}
+
+export interface PlanCandidate {
+  connector: string;
+  method: string;
+  cost_class: string;
+  reason: string;
+  estimated_cost?: number;
+  conditional?: boolean;
+  conditions?: string[] | null;
+  role?: string;
+}
+
+export interface PlanRejected {
+  connector: string;
+  reason: string;
+}
+
+export interface PlanDecision {
+  task: {
+    company: string;
+    platform: string;
+    [key: string]: any;
+  };
+  candidates: PlanCandidate[];
+  rejected: PlanRejected[];
+  summary: string;
+}
+
+export interface PlanResponse {
+  valid_companies: string[];
+  invalid_companies: InvalidCompanyItem[];
+  decisions: PlanDecision[];
+  notes?: string[];
+  valid?: string[];
+  invalid?: InvalidCompanyItem[];
+}
+
 export interface RunTotals {
   mentions_count: number;
   attempts_count: number;
@@ -80,6 +135,9 @@ export interface RunDetailResponse {
   counts: RunTotals;
   budget_snapshot: Record<string, any>;
   per_source_results: Record<string, any>;
+  task_outcomes?: TaskOutcomeItem[] | null;
+  decisions?: PlanDecision[] | null;
+  invalid_companies?: InvalidCompanyItem[] | null;
 }
 
 export interface CompactMention {
@@ -90,6 +148,7 @@ export interface CompactMention {
   url?: string | null;
   method: string;
   cost: number;
+  fallback_from?: string | null;
   [key: string]: any;
 }
 
@@ -223,6 +282,13 @@ export async function getDatasets(): Promise<DatasetConfigItem[]> {
 
 export async function createRun(data: CreateRunRequest): Promise<CreateRunResponse> {
   return apiFetch<CreateRunResponse>("/api/runs", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function planRun(data: CreateRunRequest): Promise<PlanResponse> {
+  return apiFetch<PlanResponse>("/api/plan", {
     method: "POST",
     body: JSON.stringify(data),
   });

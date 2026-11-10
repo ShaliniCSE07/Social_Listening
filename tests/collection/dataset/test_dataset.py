@@ -457,3 +457,415 @@ def test_last_updated_freshness_naive_vs_aware(tmp_path):
     m2, a2 = connector2.collect(req_fresh)
     assert a2.status == AttemptStatus.skipped
     assert "older than" in a2.reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests for default_company, company_column priority, text_mention matching,
+# UTF-8 decoding, BOM handling, undecodable rows counting, and catalogue entries
+# ---------------------------------------------------------------------------
+
+def test_default_company_matching_and_empty_reason(tmp_path):
+    """When an entry has default_company and no company column, all rows match if company matches,
+    or returns an empty attempt with reason 'dataset is for <default_company>'."""
+    csv_path = tmp_path / "zomato_default.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["rev", "stars"])
+        writer.writerow(["Awesome food delivery", "5"])
+        writer.writerow(["Quick and fresh", "4"])
+
+    entry = DatasetEntry(
+        key="zomato_single",
+        name="Zomato Single Brand",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "rev", "rating": "stars"},
+    )
+    connector = DatasetConnector(catalogue={"zomato_single": entry})
+
+    # 1. Matching company -> all rows belong to Zomato
+    req_match = CollectionRequest(company="Zomato")
+    mentions, attempt = connector.collect(req_match)
+    assert len(mentions) == 2
+    assert attempt.status == AttemptStatus.success
+    for m in mentions:
+        assert m.raw_payload["dataset_match_basis"] == "default_company"
+
+    # 2. Non-matching company -> empty attempt with specific reason
+    req_non_match = CollectionRequest(company="Swiggy")
+    mentions_empty, attempt_empty = connector.collect(req_non_match)
+    assert len(mentions_empty) == 0
+    assert attempt_empty.status == AttemptStatus.empty
+    assert attempt_empty.reason == "dataset is for Zomato"
+
+
+def test_default_company_matches_alt_spellings(tmp_path):
+    """default_company matches when request.company or any alt_spelling matches case-insensitively."""
+    csv_path = tmp_path / "zomato_alts.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["review_text"])
+        writer.writerow(["Great service"])
+
+    entry = DatasetEntry(
+        key="zomato_alts_ds",
+        name="Zomato Alts DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "review_text"},
+    )
+    connector = DatasetConnector(catalogue={"zomato_alts_ds": entry})
+
+    req = CollectionRequest(
+        company="Eternal Limited",
+        alt_spellings=["zomato", "zomato app"],
+    )
+    mentions, attempt = connector.collect(req)
+    assert len(mentions) == 1
+    assert attempt.status == AttemptStatus.success
+    assert mentions[0].raw_payload["dataset_match_basis"] == "default_company"
+
+
+def test_company_column_beats_default_company(tmp_path):
+    """When entry has both mapped company column and default_company, company column wins."""
+    csv_path = tmp_path / "multi_brand.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["brand", "review_text"])
+        writer.writerow(["Swiggy", "Fast Swiggy delivery"])
+        writer.writerow(["Zomato", "Good Zomato food"])
+
+    entry = DatasetEntry(
+        key="mixed_ds",
+        name="Mixed DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",  # Ignored because company column is mapped
+        columns={"text": "review_text", "company": "brand"},
+    )
+    connector = DatasetConnector(catalogue={"mixed_ds": entry})
+
+    # Swiggy request must collect only the Swiggy row (not empty or all rows)
+    req_swiggy = CollectionRequest(company="Swiggy")
+    mentions, attempt = connector.collect(req_swiggy)
+    assert len(mentions) == 1
+    assert mentions[0].raw_payload["brand"] == "Swiggy"
+    assert mentions[0].raw_payload["dataset_match_basis"] == "company_column"
+
+
+def test_text_mention_matching(tmp_path):
+    """When neither company column nor default_company is present, match on text."""
+    csv_path = tmp_path / "text_only.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "content"])
+        writer.writerow(["t1", "Loved ordering via Zomato!"])
+        writer.writerow(["t2", "Completely unrelated review"])
+
+    entry = DatasetEntry(
+        key="text_only_ds",
+        name="Text Only DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        columns={"text": "content", "id": "id"},
+    )
+    connector = DatasetConnector(catalogue={"text_only_ds": entry})
+
+    req = CollectionRequest(company="Zomato")
+    mentions, attempt = connector.collect(req)
+    assert len(mentions) == 1
+    assert mentions[0].item_id == "t1"
+    assert mentions[0].raw_payload["dataset_match_basis"] == "text_mention"
+
+
+def test_raw_payload_preservation_with_extra_keys(tmp_path):
+    """Row's raw_payload stays exactly as read plus metadata keys."""
+    csv_path = tmp_path / "extra_keys.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["custom_col", "review_desc", "score"])
+        writer.writerow(["custom_val_123", "Nice food", "4.5"])
+
+    entry = DatasetEntry(
+        key="payload_ds",
+        name="Payload DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "review_desc"},
+    )
+    connector = DatasetConnector(catalogue={"payload_ds": entry})
+
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato"))
+    assert len(mentions) == 1
+    payload = mentions[0].raw_payload
+
+    # Raw columns preserved exactly
+    assert payload["custom_col"] == "custom_val_123"
+    assert payload["review_desc"] == "Nice food"
+    assert payload["score"] == "4.5"
+
+    # Extra keys present
+    assert payload["dataset_key"] == "payload_ds"
+    assert "dataset_last_updated" in payload
+    assert "dataset_last_updated_basis" in payload
+    assert payload["dataset_row_number"] == 1
+    assert payload["dataset_match_basis"] == "default_company"
+
+
+def test_app_column_matching_and_null_item_id(tmp_path):
+    """Matches the kaggle zomato/swiggy app reviews schema with App column and no id column."""
+    csv_path = tmp_path / "app_reviews.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["review_description", "review_date", "App", "rating"])
+        writer.writerow(["Zomato delivery was fast", "2023-05-10", "Zomato", "5"])
+        writer.writerow(["Swiggy delivery was fast", "2023-05-11", "Swiggy", "4"])
+        writer.writerow(["Zomato had good discounts", "2023-05-12", "Zomato", "5"])
+
+    entry = DatasetEntry(
+        key="app_reviews_ds",
+        name="App Reviews DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        columns={
+            "text": "review_description",
+            "date": "review_date",
+            "company": "App",
+            "rating": "rating",
+        },
+    )
+    connector = DatasetConnector(catalogue={"app_reviews_ds": entry})
+
+    # For Zomato: 2 rows collected, item_id null, company_column basis
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato"))
+    assert len(mentions) == 2
+    for m in mentions:
+        assert m.item_id is None
+        assert m.raw_payload["App"] == "Zomato"
+        assert m.raw_payload["dataset_match_basis"] == "company_column"
+
+
+def test_utf8_non_ascii_and_emoji(tmp_path):
+    """CSV with non-ASCII text, Hindi, and emojis decodes cleanly."""
+    csv_path = tmp_path / "emoji.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "text"])
+        writer.writerow(["e1", "🍕 Pizza bahot badiya tha! Zomato rocks 🚀"])
+        writer.writerow(["e2", "खाना बहुत स्वादिष्ट था धन्यवाद 😊"])
+
+    entry = DatasetEntry(
+        key="emoji_ds",
+        name="Emoji DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "text", "id": "id"},
+    )
+    connector = DatasetConnector(catalogue={"emoji_ds": entry})
+
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato"))
+    assert len(mentions) == 2
+    assert "🍕" in mentions[0].raw_payload["text"]
+    assert "🚀" in mentions[0].raw_payload["text"]
+    assert "खाना बहुत स्वादिष्ट था" in mentions[1].raw_payload["text"]
+
+
+def test_bom_loading_csv_jsonl_json(tmp_path):
+    """Files starting with UTF-8 BOM are loaded properly without mangled headers or keys."""
+    # 1. CSV with BOM
+    csv_path = tmp_path / "bom.csv"
+    csv_bytes = b"\xef\xbb\xbftext,id\nZomato with BOM,b1\n"
+    csv_path.write_bytes(csv_bytes)
+
+    source_csv = LocalFileSource("BOM CSV", csv_path, "csv")
+    csv_rows = list(source_csv.iter_rows())
+    assert len(csv_rows) == 1
+    assert "text" in csv_rows[0]
+    assert "\ufefftext" not in csv_rows[0]
+    assert csv_rows[0]["text"] == "Zomato with BOM"
+
+    # 2. JSONL with BOM
+    jsonl_path = tmp_path / "bom.jsonl"
+    jsonl_bytes = b"\xef\xbb\xbf{\"text\": \"Zomato JSONL BOM\", \"id\": \"bj1\"}\n"
+    jsonl_path.write_bytes(jsonl_bytes)
+
+    source_jsonl = LocalFileSource("BOM JSONL", jsonl_path, "jsonl")
+    jsonl_rows = list(source_jsonl.iter_rows())
+    assert len(jsonl_rows) == 1
+    assert jsonl_rows[0]["text"] == "Zomato JSONL BOM"
+
+    # 3. JSON with BOM
+    json_path = tmp_path / "bom.json"
+    json_bytes = b"\xef\xbb\xbf[{\"text\": \"Zomato JSON BOM\", \"id\": \"bjs1\"}]"
+    json_path.write_bytes(json_bytes)
+
+    source_json = LocalFileSource("BOM JSON", json_path, "json")
+    json_rows = list(source_json.iter_rows())
+    assert len(json_rows) == 1
+    assert json_rows[0]["text"] == "Zomato JSON BOM"
+
+
+def test_undecodable_bytes_counting_and_attempt_reason(tmp_path):
+    """Corrupt/undecodable rows do not crash the run; count is reported in attempt reason."""
+    csv_path = tmp_path / "corrupt_bytes.csv"
+    # Header + 3 good rows + 2 undecodable rows
+    lines = [
+        b"id,text\n",
+        b"1,Zomato good row 1\n",
+        b"2,\xff\xfe invalid non-utf8 row\n",
+        b"3,Zomato good row 2\n",
+        b"4,\x80\xff another bad row\n",
+        b"5,Zomato good row 3\n",
+    ]
+    with open(csv_path, "wb") as f:
+        f.writelines(lines)
+
+    entry = DatasetEntry(
+        key="corrupt_ds",
+        name="Corrupt DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "text", "id": "id"},
+    )
+    connector = DatasetConnector(catalogue={"corrupt_ds": entry})
+
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato"))
+    # Run does not crash; 3 good rows collected
+    assert len(mentions) == 3
+    assert attempt.status == AttemptStatus.success
+    # Bad rows counted and mentioned in attempt reason
+    assert "2 bad rows" in attempt.reason
+    assert "decode" in attempt.reason.lower()
+
+
+def test_completely_unreadable_file_fails_with_clear_reason(tmp_path):
+    """File that cannot be decoded at all fails gracefully with a clear reason."""
+    bad_file = tmp_path / "completely_bad.csv"
+    bad_file.write_bytes(b"\xff\xfe\x00\x00\xaa\xbb\xcc\xdd\xee\xff")
+
+    entry = DatasetEntry(
+        key="bad_ds",
+        name="Bad DS",
+        source_type="local",
+        path_or_ref=str(bad_file),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "text"},
+    )
+    connector = DatasetConnector(catalogue={"bad_ds": entry})
+
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato"))
+    assert len(mentions) == 0
+    assert attempt.status == AttemptStatus.failed
+    assert "unreadable" in attempt.reason.lower() or "could not be decoded" in attempt.reason.lower()
+
+
+def test_date_parsing_without_tz_kept_untouched_in_raw_payload(tmp_path):
+    """Dates without timezone (e.g. 2023-07-23 15:52:11) are filtered accurately but remain untouched in raw_payload."""
+    csv_path = tmp_path / "dates_no_tz.csv"
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "review_text", "review_date"])
+        writer.writerow(["d1", "Zomato review 2023", "2023-07-23 15:52:11"])
+        writer.writerow(["d2", "Zomato review 2021", "2021-02-10 10:00:00"])
+
+    entry = DatasetEntry(
+        key="no_tz_ds",
+        name="No TZ DS",
+        source_type="local",
+        path_or_ref=str(csv_path),
+        format="csv",
+        platform="other",
+        content_type="review",
+        default_company="Zomato",
+        columns={"text": "review_text", "id": "id", "date": "review_date"},
+    )
+    connector = DatasetConnector(catalogue={"no_tz_ds": entry})
+
+    # Filter from 2022 onwards: d1 kept, d2 filtered
+    date_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
+    mentions, attempt = connector.collect(CollectionRequest(company="Zomato", date_from=date_from))
+    assert len(mentions) == 1
+    assert mentions[0].item_id == "d1"
+    # Exact raw string preserved untouched
+    assert mentions[0].raw_payload["review_date"] == "2023-07-23 15:52:11"
+
+
+def test_new_catalogue_entries_validation():
+    """Validates that all new Kaggle catalogue entries load cleanly with expected fields."""
+    from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
+
+    catalogue = load_dataset_catalogue()
+
+    # 1. Existing local sample preserved
+    assert "sample_reviews_local" in catalogue
+
+    # 2. kaggle_zomato_app_reviews
+    assert "kaggle_zomato_app_reviews" in catalogue
+    kz = catalogue["kaggle_zomato_app_reviews"]
+    assert kz.source_type == "kaggle"
+    assert kz.path_or_ref == "saloni1712/zomato-and-swiggy-play-store-reviews"
+    assert kz.file == "zomato.csv"
+    assert kz.format == "csv"
+    assert kz.platform == "other"
+    assert kz.content_type == "review"
+    assert kz.enabled is True
+    assert kz.columns.get("text") == "review_description"
+    assert kz.columns.get("date") == "review_date"
+    assert kz.columns.get("company") == "App"
+    assert kz.columns.get("rating") == "rating"
+    assert "id" not in kz.columns
+    assert kz.license_note == "TODO: copy the licence from the Kaggle dataset page"
+
+    # 3. kaggle_swiggy_app_reviews
+    assert "kaggle_swiggy_app_reviews" in catalogue
+    ks = catalogue["kaggle_swiggy_app_reviews"]
+    assert ks.source_type == "kaggle"
+    assert ks.path_or_ref == "saloni1712/zomato-and-swiggy-play-store-reviews"
+    assert ks.file == "swiggy.csv"
+    assert ks.format == "csv"
+    assert ks.columns.get("company") == "App"
+    assert kz.license_note == "TODO: copy the licence from the Kaggle dataset page"
+
+    # 4. kaggle_zomato_playstore_2025
+    assert "kaggle_zomato_playstore_2025" in catalogue
+    kz25 = catalogue["kaggle_zomato_playstore_2025"]
+    assert kz25.source_type == "kaggle"
+    assert kz25.path_or_ref == "sonalshinde123/zomato-app-play-store-reviews"
+    assert kz25.file == "zomato_reviews.csv"
+    assert kz25.default_company == "Zomato"
+    assert kz25.columns.get("text") == "review_text"
+    assert kz25.columns.get("id") == "review_id"
+    assert kz25.license_note == "TODO: copy the licence from the Kaggle dataset page"
+

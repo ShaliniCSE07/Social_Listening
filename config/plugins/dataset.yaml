@@ -3,6 +3,7 @@ max_age_days: 30
 allowed_formats: ["csv", "json", "jsonl", "zip"]
 storage_dir: "data/raw"
 download_dir: "data/datasets/_downloads"
-max_download_mb: 50.0
+max_download_mb: 200.0
+max_unpacked_mb: 400.0
 request_timeout: 30
 max_retries: 2

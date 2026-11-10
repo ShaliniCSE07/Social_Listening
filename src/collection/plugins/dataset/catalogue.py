@@ -17,6 +17,8 @@ class DatasetEntry:
     platform: str
     content_type: str
     enabled: bool = True
+    file: Optional[str] = None
+    default_company: Optional[str] = None
     columns: Dict[str, str] = field(default_factory=dict)
     license_note: Optional[str] = None
     last_updated_override: Optional[str] = None
@@ -46,6 +48,8 @@ def load_dataset_catalogue(path: Optional[Path] = None) -> Dict[str, DatasetEntr
             platform=val.get("platform", "other").lower(),
             content_type=val.get("content_type", "post").lower(),
             enabled=bool(val.get("enabled", True)),
+            file=val.get("file"),
+            default_company=val.get("default_company"),
             columns=val.get("columns", {}) or {},
             license_note=val.get("license_note"),
             last_updated_override=val.get("last_updated_override"),

@@ -29,11 +29,13 @@ import {
   getSources,
   getDatasets,
   createRun,
+  planRun,
   ApiError,
   type SourceConfigItem,
   type DatasetConfigItem,
   type CompanyInput,
   type CreateRunRequest,
+  type PlanResponse,
 } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ErrorBox from "@/components/ErrorBox";
 import LoadingState from "@/components/LoadingState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 interface CompanyFormItem {
@@ -114,6 +117,11 @@ export default function NewRunWizardPage() {
   const [maxAgeDays, setMaxAgeDays] = useState("");
   const [requireFresh, setRequireFresh] = useState(false);
   const [refresh, setRefresh] = useState(false);
+
+  // Step 4: Plan preview state
+  const [planData, setPlanData] = useState<PlanResponse | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
+  const [planError, setPlanError] = useState("");
 
   // Submit status
   const [submitting, setSubmitting] = useState(false);
@@ -264,11 +272,8 @@ export default function NewRunWizardPage() {
     return true;
   }, [currentStep, isStep1Valid, isStep2Valid, isStep3Valid]);
 
-  // Submission
-  const handleStartRun = async () => {
-    setSubmitting(true);
-    setSubmitError("");
-
+  // Helper to build the exact CreateRunRequest payload
+  const buildRunPayload = useCallback((): CreateRunRequest => {
     const validCompanies: CompanyInput[] = companies
       .filter((c) => c.name.trim())
       .map((c) => {
@@ -301,6 +306,47 @@ export default function NewRunWizardPage() {
     if (maxAgeDays) payload.max_age_days = parseFloat(maxAgeDays);
     if (requireFresh) payload.require_fresh = true;
     if (refresh) payload.refresh = true;
+
+    return payload;
+  }, [
+    companies,
+    selectedPlatforms,
+    selectedDatasets,
+    budgetUsd,
+    dateFrom,
+    dateTo,
+    maxAgeDays,
+    requireFresh,
+    refresh,
+  ]);
+
+  // Load plan preview on step 4
+  const loadPlan = useCallback(async () => {
+    setLoadingPlan(true);
+    setPlanError("");
+    try {
+      const payload = buildRunPayload();
+      const data = await planRun(payload);
+      setPlanData(data);
+    } catch (err: any) {
+      setPlanError(err.message || "Failed to load collection plan preview.");
+    } finally {
+      setLoadingPlan(false);
+    }
+  }, [buildRunPayload]);
+
+  useEffect(() => {
+    if (currentStep === 4) {
+      loadPlan();
+    }
+  }, [currentStep, loadPlan]);
+
+  // Submission
+  const handleStartRun = async () => {
+    setSubmitting(true);
+    setSubmitError("");
+
+    const payload = buildRunPayload();
 
     try {
       const res = await createRun(payload);
@@ -1004,6 +1050,156 @@ export default function NewRunWizardPage() {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* Plan Preview Card */}
+                <div className="p-4 rounded-xl border border-border bg-card space-y-4" data-testid="plan-preview-card">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-semibold text-foreground">
+                        Plan preview
+                      </h4>
+                    </div>
+                    {loadingPlan && (
+                      <Badge variant="outline" className="text-xs text-muted-foreground animate-pulse">
+                        Evaluating methods…
+                      </Badge>
+                    )}
+                  </div>
+
+                  {loadingPlan ? (
+                    <div className="space-y-3" data-testid="plan-preview-loading">
+                      <Skeleton className="h-16 w-full rounded-lg" />
+                      <Skeleton className="h-16 w-full rounded-lg" />
+                    </div>
+                  ) : planError ? (
+                    <div data-testid="plan-preview-error">
+                      <ErrorBox message={planError} onRetry={loadPlan} />
+                    </div>
+                  ) : planData ? (
+                    <div className="space-y-3" data-testid="plan-preview-content">
+                      {planData.invalid_companies && planData.invalid_companies.length > 0 && (
+                        <div className="p-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-xs space-y-1">
+                          <div className="flex items-center gap-1.5 font-semibold">
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>Invalid companies ({planData.invalid_companies.length})</span>
+                          </div>
+                          <ul className="list-disc list-inside space-y-0.5 pl-1">
+                            {planData.invalid_companies.map((inv, idx) => (
+                              <li key={idx}>
+                                <span className="font-medium">{inv.name}</span>: {Array.isArray(inv.reasons) ? inv.reasons.join(", ") : String(inv.reasons)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {planData.decisions && planData.decisions.length > 0 ? (
+                        <div className="space-y-2.5">
+                          {planData.decisions.map((dec, idx) => {
+                            const isNoEligible = !dec.candidates || dec.candidates.length === 0;
+                            return (
+                              <div
+                                key={idx}
+                                data-testid={isNoEligible ? "plan-row-amber" : "plan-preview-row"}
+                                className={`p-3 rounded-lg border text-xs transition-colors ${
+                                  isNoEligible
+                                    ? "border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200"
+                                    : "border-border bg-card/60 text-foreground"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between pb-1.5 border-b border-border/50">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-sm">
+                                      {dec.task?.company || "Unknown Company"}
+                                    </span>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs capitalize ${
+                                        isNoEligible ? "border-amber-400 text-amber-800 dark:text-amber-300" : ""
+                                      }`}
+                                    >
+                                      {dec.task?.platform || "task"}
+                                    </Badge>
+                                  </div>
+                                  {isNoEligible && (
+                                    <Badge className="bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100 hover:bg-amber-200 text-xs">
+                                      No eligible method
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {isNoEligible ? (
+                                  <div className="pt-2 space-y-1.5">
+                                    <p className="font-medium text-amber-800 dark:text-amber-300">
+                                      {dec.summary || "No eligible collection method configured."}
+                                    </p>
+                                    {dec.rejected && dec.rejected.length > 0 && (
+                                      <div className="space-y-1 pt-1">
+                                        <span className="text-[11px] font-semibold uppercase tracking-wider block opacity-80">
+                                          Rejected methods:
+                                        </span>
+                                        <ul className="space-y-1 list-disc list-inside text-amber-800/90 dark:text-amber-300/90">
+                                          {dec.rejected.map((r, rIdx) => (
+                                            <li key={rIdx}>
+                                              <span className="font-medium font-mono">{r.connector}</span>: {r.reason}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="pt-2 space-y-2">
+                                    <div>
+                                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                                        Ranked collection methods:
+                                      </span>
+                                      <ol className="space-y-1 list-decimal list-inside">
+                                        {dec.candidates.map((cand, cIdx) => (
+                                          <li key={cIdx} className="text-foreground">
+                                            <span className="font-medium">{cand.connector}</span>
+                                            <span className="text-muted-foreground ml-1.5">
+                                              ({cand.method}, {cand.cost_class}{cand.role ? ` · ${cand.role.replace("_", " ")}` : ""})
+                                            </span>
+                                            {cand.reason && (
+                                              <span className="text-muted-foreground/80 ml-1.5">
+                                                — {cand.reason}
+                                              </span>
+                                            )}
+                                          </li>
+                                        ))}
+                                      </ol>
+                                    </div>
+
+                                    {dec.rejected && dec.rejected.length > 0 && (
+                                      <div className="pt-1 border-t border-border/40">
+                                        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                                          Rejected methods:
+                                        </span>
+                                        <ul className="space-y-1 list-disc list-inside text-muted-foreground">
+                                          {dec.rejected.map((rej, rIdx) => (
+                                            <li key={rIdx}>
+                                              <span className="font-medium font-mono text-foreground/80">{rej.connector}</span>: {rej.reason}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic py-2">
+                          No tasks planned for the selected targets and sources.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

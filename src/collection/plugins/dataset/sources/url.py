@@ -62,7 +62,8 @@ class UrlSource(DatasetSource):
         self.refresh = refresh
 
         cfg = load_plugin_config("dataset")
-        self.max_download_mb: float = float(cfg.get("max_download_mb", 50.0))
+        self.max_download_mb: float = float(cfg.get("max_download_mb", 200.0))
+        self.max_unpacked_mb: float = float(cfg.get("max_unpacked_mb", 400.0))
         self.request_timeout: int = int(cfg.get("request_timeout", 30))
         self.max_retries: int = int(cfg.get("max_retries", 2))
 
@@ -75,6 +76,7 @@ class UrlSource(DatasetSource):
         self._last_modified_header_dt: Optional[datetime] = None
         self._download_time: Optional[datetime] = None
         self._local_file_path: Optional[Path] = None
+        self._local_source: Optional[LocalFileSource] = None
 
     def _get_hf_token(self) -> Optional[str]:
         tok = os.environ.get("HUGGINGFACE_TOKEN", "").strip()
@@ -193,9 +195,22 @@ class UrlSource(DatasetSource):
 
         # Handle zip extraction if applicable
         final_path = download_target
+        max_unpacked_bytes = self.max_unpacked_mb * 1024 * 1024
         if self.file_format == "zip" or download_target.suffix.lower() == ".zip":
+            oversized = False
             with zipfile.ZipFile(download_target, "r") as zf:
-                zf.extractall(self.target_dir)
+                total_uncompressed = sum(info.file_size for info in zf.infolist())
+                if total_uncompressed > max_unpacked_bytes:
+                    oversized = True
+                else:
+                    zf.extractall(self.target_dir)
+
+            if oversized:
+                download_target.unlink(missing_ok=True)
+                raise ValueError(
+                    f"Unpacked dataset size exceeded maximum limit of {self.max_unpacked_mb} MB"
+                )
+
             # Find extracted data file
             extracted_files = [
                 p
@@ -205,6 +220,12 @@ class UrlSource(DatasetSource):
             if not extracted_files:
                 raise ValueError("Zip archive did not contain any CSV, JSON, or JSONL files")
             final_path = extracted_files[0]
+        else:
+            if download_target.stat().st_size > max_unpacked_bytes:
+                download_target.unlink(missing_ok=True)
+                raise ValueError(
+                    f"Unpacked dataset size exceeded maximum limit of {self.max_unpacked_mb} MB"
+                )
 
         # Write metadata
         with open(meta_file, "w", encoding="utf-8") as f:
@@ -245,11 +266,17 @@ class UrlSource(DatasetSource):
         if effective_format == "zip":
             effective_format = "csv"
 
-        local_source = LocalFileSource(
+        self._local_source = LocalFileSource(
             name=self.name,
             path=path,
             file_format=effective_format,
             license_note=self.license_note,
         )
-        return local_source.iter_rows()
+        yield from self._local_source.iter_rows()
+
+    @property
+    def decode_errors(self) -> int:
+        if self._local_source is not None:
+            return self._local_source.decode_errors
+        return 0
 

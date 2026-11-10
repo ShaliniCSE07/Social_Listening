@@ -212,6 +212,39 @@ def test_url_source_size_limit(tmp_path):
     with pytest.raises(ValueError) as exc_info:
         source.download_if_needed()
     assert "exceeded maximum limit" in str(exc_info.value)
+    # Ensure partial download was deleted
+    assert not (dl_dir / "large_key" / "toolarge.csv.tmp").exists()
+
+
+@responses.activate
+def test_url_source_unpacked_size_limit(tmp_path):
+    url = "https://example.com/unpacked_too_large.zip"
+
+    # Create zip in-memory with unpacked data larger than limit
+    csv_data = "x" * (2 * 1024 * 1024)  # 2MB unpacked
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("huge_file.csv", csv_data)
+    zip_bytes = zip_buffer.getvalue()
+
+    responses.add(
+        responses.GET,
+        url,
+        body=zip_bytes,
+        status=200,
+        content_type="application/zip",
+    )
+
+    dl_dir = tmp_path / "downloads"
+    source = UrlSource("ZipHuge", "zip_huge_key", url, "zip", download_dir=dl_dir)
+    source.max_download_mb = 10.0
+    source.max_unpacked_mb = 1.0  # Max 1 MB unpacked
+
+    with pytest.raises(ValueError) as exc_info:
+        source.download_if_needed()
+    assert "Unpacked dataset size exceeded maximum limit" in str(exc_info.value)
+    # Ensure cleaned up
+    assert not (dl_dir / "zip_huge_key" / "huge_file.csv").exists()
 
 
 @responses.activate

@@ -42,3 +42,56 @@ datasets:
     license_note: "Internal synthetic test dataset"
     last_updated_override: null
 
+  kaggle_zomato_app_reviews:
+    name: "Zomato Play Store Reviews"
+    source_type: "kaggle"
+    path_or_ref: "saloni1712/zomato-and-swiggy-play-store-reviews"
+    file: "zomato.csv"
+    format: "csv"
+    platform: "other"
+    content_type: "review"
+    enabled: true
+    columns:
+      text: "review_description"
+      date: "review_date"
+      company: "App"
+      rating: "rating"
+    license_note: "TODO: copy the licence from the Kaggle dataset page"
+    last_updated_override: null
+
+  kaggle_swiggy_app_reviews:
+    name: "Swiggy Play Store Reviews"
+    source_type: "kaggle"
+    path_or_ref: "saloni1712/zomato-and-swiggy-play-store-reviews"
+    file: "swiggy.csv"
+    format: "csv"
+    platform: "other"
+    content_type: "review"
+    enabled: true
+    columns:
+      text: "review_description"
+      date: "review_date"
+      company: "App"
+      rating: "rating"
+    license_note: "TODO: copy the licence from the Kaggle dataset page"
+    last_updated_override: null
+
+  kaggle_zomato_playstore_2025:
+    name: "Zomato Play Store Reviews 2025"
+    source_type: "kaggle"
+    path_or_ref: "sonalshinde123/zomato-app-play-store-reviews"
+    file: "zomato_reviews.csv"
+    format: "csv"
+    platform: "other"
+    content_type: "review"
+    default_company: "Zomato"
+    enabled: true
+    columns:
+      text: "review_text"
+      date: "review_date"
+      id: "review_id"
+      rating: "rating"
+    license_note: "TODO: copy the licence from the Kaggle dataset page"
+    last_updated_override: null
+
+
