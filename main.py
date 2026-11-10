@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from checkpoint import advance_checkpoint, get_checkpoint
+from checkpoint import compute_window, advance_checkpoint, get_checkpoint
 from models import CollectionAttempt, RawMention
 from processor import process_mentions
 from storage import ensure_indexes, get_db
@@ -63,14 +63,19 @@ async def process_run(
 
     # Determine load_type per company: no checkpoint -> full, else delta
     db = get_db()
-    load_type_map: dict[str, str] = {}
-    for m in mentions:
-        company_id = f"c_{__import__('hashlib').sha256(m.company.encode()).hexdigest()[:10]}"
-        cp = get_checkpoint(company_id, m.platform.value)
-        load_type_map[m.company] = "full" if cp is None else "delta"
+    company_id_for = lambda name: f"c_{__import__('hashlib').sha256(name.encode()).hexdigest()[:10]}"
 
-    # Use the strictest load_type across all companies as the run's default
-    overall_load_type = "full" if any(v == "full" for v in load_type_map.values()) else "delta"
+    # Compute a window per (company, platform) using FR-DLT-02/03 rules.
+    windows: dict[tuple[str, str], dict] = {}
+    for m in mentions:
+        key = (m.company, m.platform.value)
+        if key in windows:
+            continue
+        w = compute_window(company_id_for(m.company), m.platform.value, is_paid=False)
+        windows[key] = w.model_dump()
+
+    # Run is "full" if any (company, platform) is full; otherwise delta.
+    overall_load_type = "full" if any(v["load_type"] == "full" for v in windows.values()) else "delta"
 
     result = process_mentions(
         mentions=mentions,
@@ -78,21 +83,26 @@ async def process_run(
         run_id=run_id,
         company_industry=industry_map,
         load_type=overall_load_type,
+        windows=windows,
     )
 
     # Advance checkpoints only for companies/platforms that completed successfully (FR-DLT-05)
     # Simplified here: advance checkpoint for each company/platform that had at least one successful attempt
     from datetime import datetime, timezone
+        # FR-DLT-05 / GR-9: advance only for platforms whose records were saved.
     succeeded = set()
     for a in attempts:
         if a.status.value == "success":
             succeeded.add((a.company, a.platform.value))
-    for company, platform in succeeded:
-        company_id = f"c_{__import__('hashlib').sha256(company.encode()).hexdigest()[:10]}"
+
+    for (company, platform) in succeeded:
+        window = windows.get((company, platform))
+        if window is None:
+            continue
         advance_checkpoint(
-            company_id=company_id,
+            company_id=company_id_for(company),
             platform=platform,
-            window_to=datetime.now(timezone.utc),
+            window_to=window["window_to"],
             run_id=run_id,
             method="api",
         )

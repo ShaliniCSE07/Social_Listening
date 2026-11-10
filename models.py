@@ -118,5 +118,8 @@ class SoclRecord(BaseModel):
     run_id: str
     load_type: str  # "full" | "delta"
     is_update: bool = False
+    fingerprint: str = ""
+    version: int = 1
+    supersedes: str | None = None
     incomplete: list[str] = Field(default_factory=list)
     company_match: str = "confirmed"

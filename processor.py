@@ -75,6 +75,7 @@ def process_mentions(
     run_id: str,
     company_industry: dict[str, str | None],
     load_type: str,
+    windows: dict[tuple[str, str], dict] | None = None,
 ) -> dict:
     """
     Input: Member 1 handoff files (parsed lists) + run_id + company industry mapping
@@ -89,6 +90,7 @@ def process_mentions(
     counters = {
         "collected": 0,
         "duplicates": 0,
+        "updated": 0,
         "wrong_company": 0,
         "suppressed": 0,
         "quarantined": 0,
@@ -148,7 +150,7 @@ def process_mentions(
                 counters["incomplete"] += 1
 
             # ---- Build record ----
-            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, text, mapped["posted_at"])
+            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, "", mapped["posted_at"]) # Pass empty string instead of text
             rec = SoclRecord(
                 record_id=f"{mid}:{company_id}",
                 mention_id=mid,
@@ -174,8 +176,11 @@ def process_mentions(
                 cost_usd=raw.cost_usd,
                 collected_at=raw.collected_at,
                 run_id=run_id,
-                load_type=load_type,
+                load_type=(windows or {}).get((company, raw.platform.value), {}).get("load_type", load_type),
                 is_update=False,
+                fingerprint=_fingerprint(raw.raw_payload.get("body", "") + raw.raw_payload.get("updated", ""), mapped.get("posted_at")),
+                version=1,
+                supersedes=None,
                 incomplete=incomplete,
                 company_match="confirmed",
             )

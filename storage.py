@@ -17,5 +17,6 @@ def ensure_indexes():
     db.checkpoints.create_index(
         [("companyId", 1), ("platform", 1)], unique=True
     )
-    db.records.create_index([("recordId", 1)], unique=True)
+    db.records.create_index([("recordId", 1), ("version", 1)])
+    db.records.create_index([("mentionId", 1)])
     db.records.create_index([("companyId", 1), ("platform", 1), ("platformItemId", 1), ("version", 1)])
