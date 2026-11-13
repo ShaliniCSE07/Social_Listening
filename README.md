@@ -91,6 +91,19 @@ Execute collection tasks with fallback chains, scraping safety gates, and budget
 python -m src.collection.executor --input targets.json --out data/output
 ```
 
+## Scraping Policy & Safety Gating
+
+- **One Source of Truth for Sites**: `config/plugins/scraping_sites.yaml` is the single source of truth for scraping permissions (`allows_scraping`) and site-to-platform mapping (e.g. `hackernews` mapped to platform `news_blog` to participate in dataset fallback chains).
+- **Candidate Eligibility**: Scraping is eligible as a candidate only when `request.scraping_allowed` is `true` and the platform has a site with `allows_scraping: true` in `scraping_sites.yaml`. Otherwise it is rejected with reason `"scraping not allowed for this run"`.
+- **Three-Condition Execution Gate**: Before running scraping, the executor verifies:
+  1. `site_policy_allows`: Site configuration permits scraping.
+  2. `other_methods_failed`: Every earlier method was attempted and ended `failed`, `rate_limited`, or `empty` (or if no earlier method was eligible, recorded as `true` with detail `"no other method available"`).
+  3. `below_min_threshold`: Collected items so far < `scraping.min_results_threshold` (default 5).
+  All three boolean checks are recorded in `attempt.scraping_checks`. Any `false` check skips execution without fetching.
+- **Fallback Provenance**: When scraping succeeds, its `RawMention` records carry `fallback_from` indicating the prior method that failed or fell short.
+- **Service Plan Transparency**: `POST /api/plan` respects `scraping_allowed` and surfaces scraping candidates as `conditional: true` with the three conditions and known plan-time status.
+
+
 ## Frontend
 
 The frontend is a Next.js (App Router) application with TypeScript and Tailwind CSS.

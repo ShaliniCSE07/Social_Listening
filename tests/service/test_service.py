@@ -795,3 +795,123 @@ def test_older_run_summary_loads_without_new_fields(client, monkeypatch, tmp_pat
     assert detail["decisions"] is None
     assert detail["invalid_companies"] is None
 
+
+def test_intermediate_run_summary_without_run_id_loads_cleanly(client, monkeypatch, tmp_path):
+    """An in-flight run summary missing explicit run_id or written by write_outputs loads with run_id and valid counts."""
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.routes.runs.run_store", custom_store)
+
+    intermediate_summary = {
+        "mentions_count": 0,
+        "attempts_count": 0,
+        "task_outcomes": [],
+        "budget_snapshot": {},
+    }
+    custom_store.save_run_summary("run_in_flight", intermediate_summary)
+
+    resp = client.get("/api/runs/run_in_flight")
+    assert resp.status_code == 200
+    detail = resp.json()
+    assert detail["id"] == "run_in_flight"
+    assert detail["counts"]["mentions_count"] == 0
+
+
+
+# ---------------------------------------------------------------------------
+# Platform defaulting service-layer tests
+# ---------------------------------------------------------------------------
+
+def test_nothing_selected_returns_422(client):
+    """POST /api/runs with sources={} (no api and no dataset_keys) → 422."""
+    resp = client.post(
+        "/api/runs",
+        json={
+            "companies": [{"name": "Zomato"}],
+            "sources": {},
+        },
+    )
+    assert resp.status_code == 422
+    assert "Choose at least one source" in resp.json()["detail"]
+
+
+def test_platforms_empty_with_dataset_no_platform_tasks(monkeypatch, tmp_path):
+    """sources.api=[] with dataset_keys → no platform tasks produced in the plan."""
+    from src.collection.planner import Planner
+
+    planner = Planner()
+    result = planner.plan(
+        {
+            "companies": [{"company": "Zomato"}],
+            "platforms": [],
+            "dataset_keys": ["sample_reviews_local"],
+        }
+    )
+    platform_tasks = [t for t in result.tasks if t.platform != "dataset"]
+    assert platform_tasks == [], (
+        "platforms=[] with dataset_keys must yield no platform tasks"
+    )
+
+
+def test_dataset_only_run_status_is_completed(monkeypatch, tmp_path):
+    """Dataset-only run where dataset task succeeds → status = completed."""
+    from src.collection.plugins.dataset.connector import DatasetConnector
+    from src.contracts.enums import AttemptStatus, Method
+
+    custom_store = RunStore(base_dir=tmp_path / "runs")
+    monkeypatch.setattr("src.service.runner.run_store", custom_store)
+
+    # Mock catalogue entry that returns success with items
+    class MockDatasetConnector(BaseConnector):
+        method: ClassVar[Method] = Method.dataset
+        name: ClassVar[str] = "dataset"
+        platforms: ClassVar[List[Platform]] = [Platform.other]
+
+        def can_run(self, request: CollectionRequest) -> Tuple[bool, str]:
+            return True, "OK"
+
+        def estimate_cost(self, request: CollectionRequest) -> float:
+            return 0.0
+
+        def collect(self, request: CollectionRequest) -> Tuple[List[RawMention], CollectionAttempt]:
+            now = datetime.now(timezone.utc)
+            mentions = [
+                make_mention(
+                    company=request.company,
+                    platform=Platform.other,
+                    item_id=f"ds_{i}",
+                    raw_payload={"text": f"Dataset row {i}", "created_utc": "2026-01-01"},
+                    source="sample_reviews_local",
+                    method_used=Method.dataset,
+                    tool_used="dataset",
+                )
+                for i in range(5)
+            ]
+            att = CollectionAttempt(
+                company=request.company,
+                platform=Platform.other,
+                method=self.method,
+                status=AttemptStatus.success,
+                reason="Dataset read OK",
+                item_count=5,
+                cost_usd=0.0,
+                started_at=now,
+                finished_at=now,
+            )
+            return mentions, att
+
+    test_runner = RunRunner(connector_classes=[MockDatasetConnector])
+    req = CreateRunRequest(
+        companies=[CompanyInput(name="Zomato")],
+        sources=SourcesInput(dataset_keys=["sample_reviews_local"]),
+    )
+    summary = test_runner.run("run_dataset_only_test", req)
+
+    # Must have only dataset tasks, no platform tasks
+    platform_tasks = [
+        t for t in summary.get("task_outcomes", [])
+        if t.get("platform") != "dataset"
+    ]
+    assert platform_tasks == [], "dataset-only run must have no platform task outcomes"
+    assert summary["status"] == "completed", (
+        f"dataset-only run with successful dataset task must be 'completed', got {summary['status']}"
+    )

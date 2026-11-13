@@ -152,9 +152,9 @@ platforms:
       notes: "Web scraping fallback"
 
 scraping:
-  # Per-site flag for domains explicitly allowed for scraping
+  # Note: per-site scraping permissions are governed by config/plugins/scraping_sites.yaml
   allows_scraping: false # default false
-  allowed_sites: [] # empty list of sites
+  allowed_sites: [] # superseded by config/plugins/scraping_sites.yaml
   # Minimum results threshold before fallback to scraping is considered
   # Default from global pipeline config; pending supervisor verification
   min_results_threshold: 5

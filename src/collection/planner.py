@@ -348,9 +348,13 @@ class Planner:
         normalized["branches"] = _clean_str_list(raw.get("branches"))
 
         # 4. Platforms validation and normalization
+        # Distinguish "key missing / null" from "explicit empty list []"
+        platforms_key_given = "platforms" in raw
         raw_platforms = raw.get("platforms")
         valid_platforms: List[Platform] = []
-        if raw_platforms is not None:
+
+        if platforms_key_given and raw_platforms is not None:
+            # Explicit list provided (may be empty [])
             if not isinstance(raw_platforms, (list, tuple)):
                 raw_platforms = [raw_platforms]
             for p in raw_platforms:
@@ -370,16 +374,19 @@ class Planner:
                 else:
                     reasons.append(f"Unknown platform: '{p}'")
 
-            # Deduplicate platforms
+            # Deduplicate platforms; keep result even when empty — no default fallback
             dedup_platforms: List[Platform] = []
             seen_p: Set[Platform] = set()
             for p in valid_platforms:
                 if p not in seen_p:
                     seen_p.add(p)
                     dedup_platforms.append(p)
-            normalized["platforms"] = dedup_platforms if dedup_platforms else default_platforms
+            normalized["platforms"] = dedup_platforms
         else:
-            normalized["platforms"] = default_platforms
+            # Key missing or null: default to all real platforms only when no dataset_keys
+            raw_dataset_keys_check = raw.get("dataset_keys")
+            has_datasets = bool(raw_dataset_keys_check)
+            normalized["platforms"] = [] if has_datasets else default_platforms
 
         # 5. Dataset keys validation
         raw_dataset_keys = raw.get("dataset_keys")

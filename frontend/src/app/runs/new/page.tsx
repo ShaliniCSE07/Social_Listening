@@ -9,6 +9,7 @@ import {
   Radio,
   Sliders,
   CheckCircle2,
+  XCircle,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -109,6 +110,7 @@ export default function NewRunWizardPage() {
   // Step 2: Sources
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set());
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string>>(new Set());
+  const [scrapingAllowed, setScrapingAllowed] = useState(false);
 
   // Step 3: Options
   const [budgetUsd, setBudgetUsd] = useState("");
@@ -290,6 +292,7 @@ export default function NewRunWizardPage() {
 
     const payload: CreateRunRequest = {
       companies: validCompanies,
+      scraping_allowed: scrapingAllowed,
     };
 
     const apiPlats = Array.from(selectedPlatforms);
@@ -312,6 +315,7 @@ export default function NewRunWizardPage() {
     companies,
     selectedPlatforms,
     selectedDatasets,
+    scrapingAllowed,
     budgetUsd,
     dateFrom,
     dateTo,
@@ -370,6 +374,7 @@ export default function NewRunWizardPage() {
   if (configError) return <ErrorBox message={configError} onRetry={loadConfig} />;
 
   const apiSources = sources.filter((s) => s.method === "api");
+  const scrapingSources = sources.filter((s) => s.method === "scraping");
   const progressPercent = (currentStep / 4) * 100;
 
   return (
@@ -784,6 +789,105 @@ export default function NewRunWizardPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Web scraping Card */}
+              <Card data-testid="card-web-scraping">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Web scraping</CardTitle>
+                      <CardDescription>
+                        Automated fallback site scraping.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="switch-scraping-allowed"
+                        className="text-sm font-medium text-foreground cursor-pointer"
+                      >
+                        Allow web scraping
+                      </label>
+                      <Switch
+                        id="switch-scraping-allowed"
+                        checked={scrapingAllowed}
+                        onCheckedChange={setScrapingAllowed}
+                        data-testid="switch-scraping-allowed"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Last resort only. Used when other methods fail or return too little, the site&apos;s policy allows it, and results are below the minimum. Respects robots.txt and waits between requests.
+                  </p>
+
+                  {!scrapingAllowed && (
+                    <p className="text-xs text-muted-foreground italic" data-testid="scraping-disabled-caption">
+                      Turn on scraping to use these sites
+                    </p>
+                  )}
+
+                  <div className="space-y-3 pt-1">
+                    {scrapingSources.length === 0 ? (
+                      <div className="p-4 rounded-lg border border-dashed border-border text-center text-xs text-muted-foreground">
+                        No web scraping sources configured.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {scrapingSources.map((s) => {
+                          const allowsScraping = (s as any).allows_scraping !== undefined
+                            ? Boolean((s as any).allows_scraping)
+                            : s.can_run;
+                          const licenseNote = (s as any).license_note;
+                          const cannotRun = !s.can_run;
+                          const isDisabled = !scrapingAllowed || cannotRun;
+
+                          return (
+                            <div
+                              key={s.name}
+                              className={`p-3.5 rounded-xl border transition-all ${
+                                isDisabled
+                                  ? "opacity-60 bg-muted/40 border-border cursor-not-allowed text-muted-foreground"
+                                  : "border-border bg-card shadow-sm text-foreground"
+                              }`}
+                              data-testid={`scraping-site-${s.name}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold">
+                                  {s.name}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] ${
+                                    allowsScraping && scrapingAllowed && !cannotRun
+                                      ? "text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                                      : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {allowsScraping ? "Scraping allowed" : "Scraping not allowed"}
+                                </Badge>
+                              </div>
+
+                              {licenseNote && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Licence: {licenseNote}
+                                </p>
+                              )}
+
+                              {cannotRun && s.reason && (
+                                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5 flex items-center gap-1 font-mono">
+                                  <AlertCircle className="h-3 w-3 shrink-0" />
+                                  {s.reason}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 
@@ -1149,6 +1253,13 @@ export default function NewRunWizardPage() {
                                         </ul>
                                       </div>
                                     )}
+
+                                    {/* Scraping condition preview if off or rejected */}
+                                    {(!scrapingAllowed || dec.rejected?.some((r) => r.connector === "scraping")) && (
+                                      <div className="pt-2 border-t border-amber-200 dark:border-amber-900/60 text-xs text-muted-foreground" data-testid="plan-scraping-not-allowed">
+                                        <span>Web scraping: Not allowed for this run</span>
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="pt-2 space-y-2">
@@ -1161,7 +1272,7 @@ export default function NewRunWizardPage() {
                                           <li key={cIdx} className="text-foreground">
                                             <span className="font-medium">{cand.connector}</span>
                                             <span className="text-muted-foreground ml-1.5">
-                                              ({cand.method}, {cand.cost_class}{cand.role ? ` · ${cand.role.replace("_", " ")}` : ""})
+                                              ({cand.method}, {cand.cost_class}{cand.role ? ` · ${cand.role.replace("_", " ")}` : ""}{cand.conditional ? " · conditional" : ""})
                                             </span>
                                             {cand.reason && (
                                               <span className="text-muted-foreground/80 ml-1.5">
@@ -1172,6 +1283,59 @@ export default function NewRunWizardPage() {
                                         ))}
                                       </ol>
                                     </div>
+
+                                    {/* Scraping candidate details if present */}
+                                    {(() => {
+                                      const scrapingCand = dec.candidates.find(
+                                        (c) => c.method === "scraping" || c.connector === "scraping" || c.conditional
+                                      );
+                                      if (scrapingCand) {
+                                        const policyAllowed = scrapingCand.known_conditions?.site_policy_allows ?? scrapingCand.conditions_status?.site_policy_allows;
+                                        return (
+                                          <div className="p-2.5 rounded-lg border border-border/80 bg-muted/20 space-y-1.5" data-testid="scraping-conditions-panel">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="font-semibold text-xs text-foreground capitalize">
+                                                {scrapingCand.connector || "Web scraping"}
+                                              </span>
+                                              <Badge variant="outline" className="text-[10px] text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800">
+                                                conditional
+                                              </Badge>
+                                            </div>
+                                            <div className="space-y-1 text-xs pl-1">
+                                              <div className="flex items-center gap-1.5" data-testid="condition-site-policy">
+                                                {policyAllowed ? (
+                                                  <>
+                                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                    <span className="text-foreground">Site policy allows scraping (known now: yes)</span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                                                    <span className="text-foreground">Site policy allows scraping (known now: no)</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1.5" data-testid="condition-other-methods">
+                                                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                <span className="text-muted-foreground">Other methods failed (known during the run) — Checked during the run</span>
+                                              </div>
+                                              <div className="flex items-center gap-1.5" data-testid="condition-threshold">
+                                                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                <span className="text-muted-foreground">Results below the minimum (known during the run) — Checked during the run</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+                                      if (!scrapingAllowed || dec.rejected?.some((r) => r.connector === "scraping")) {
+                                        return (
+                                          <div className="pt-1.5 border-t border-border/40 text-xs text-muted-foreground" data-testid="scraping-not-allowed">
+                                            <span>Web scraping: Not allowed for this run</span>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
 
                                     {dec.rejected && dec.rejected.length > 0 && (
                                       <div className="pt-1 border-t border-border/40">

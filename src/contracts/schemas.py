@@ -47,6 +47,9 @@ class CollectionAttempt(BaseModel):
     started_at: datetime
     finished_at: datetime
     scraping_checks: Optional[Dict[str, bool]] = None
+    pages_fetched: int = Field(default=0, ge=0)
+    pages_from_cache: int = Field(default=0, ge=0)
+    delay_used: float = Field(default=0.0, ge=0.0)
 
     @field_validator("started_at", "finished_at")
     @classmethod

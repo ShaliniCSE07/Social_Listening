@@ -403,3 +403,78 @@ def test_default_platforms_never_include_other():
     for task in result.tasks:
         assert task.platform != Platform.other
         assert task.platform != "other"
+
+
+# ---------------------------------------------------------------------------
+# Platform defaulting tests (requirement: fix platform defaulting behaviour)
+# ---------------------------------------------------------------------------
+
+def test_platforms_empty_list_creates_no_platform_tasks():
+    """platforms: [] must create no platform tasks (do not fall back to defaults)."""
+    data = {
+        "company": "TestCorp",
+        "platforms": [],
+    }
+    result = plan(data)
+    platform_tasks = [t for t in result.tasks if t.platform != "dataset"]
+    assert platform_tasks == [], "explicit [] platforms must yield zero platform tasks"
+
+
+def test_platforms_missing_no_dataset_defaults_to_all_real_platforms():
+    """platforms key missing and no dataset_keys → defaults to all real platforms."""
+    result = plan({"company": "TestCorp"})
+    assert len(result.tasks) > 0, "should produce tasks when only company is given"
+    for t in result.tasks:
+        assert t.platform != "dataset"
+        assert t.platform in {
+            Platform.reddit,
+            Platform.google,
+            Platform.twitter_x,
+            Platform.instagram,
+            Platform.linkedin,
+            Platform.facebook,
+            Platform.news_blog,
+        }
+
+
+def test_platforms_missing_with_dataset_creates_only_dataset_tasks():
+    """platforms key missing but dataset_keys given → only dataset tasks, no platform tasks."""
+    result = plan({
+        "company": "TestCorp",
+        "dataset_keys": ["sample_reviews_local"],
+    })
+    platform_tasks = [t for t in result.tasks if t.platform != "dataset"]
+    assert platform_tasks == [], "dataset_keys with no platforms key must yield no platform tasks"
+    dataset_tasks = [t for t in result.tasks if t.platform == "dataset"]
+    assert len(dataset_tasks) == 1, "should create exactly one dataset task"
+
+
+def test_explicit_reddit_platform_creates_reddit_task():
+    """platforms: ['reddit'] must create the reddit task."""
+    result = plan({"company": "TestCorp", "platforms": ["reddit"]})
+    assert any(t.platform == Platform.reddit for t in result.tasks), (
+        "explicit reddit must create a reddit task"
+    )
+
+
+def test_dataset_only_per_company_creates_exactly_one_dataset_task():
+    """A request with a dataset_key and a platforms [] creates exactly one dataset task per company."""
+    result = plan({
+        "companies": [
+            {"company": "Alpha", "platforms": [], "dataset_keys": ["sample_reviews_local"]},
+            {"company": "Beta",  "platforms": [], "dataset_keys": ["sample_reviews_local"]},
+        ]
+    })
+    for company in ("Alpha", "Beta"):
+        ds_tasks = [
+            t for t in result.tasks
+            if t.company == company and t.platform == "dataset"
+        ]
+        assert len(ds_tasks) == 1, (
+            f"{company} should have exactly 1 dataset task, got {len(ds_tasks)}"
+        )
+        plat_tasks = [
+            t for t in result.tasks
+            if t.company == company and t.platform != "dataset"
+        ]
+        assert plat_tasks == [], f"{company} should have no platform tasks when platforms=[]"

@@ -31,13 +31,20 @@ class RunStore:
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                    totals = data.get("counts")
+                    if not isinstance(totals, dict):
+                        totals = {
+                            "mentions_count": data.get("mentions_count", 0),
+                            "attempts_count": data.get("attempts_count", 0),
+                            "cost_usd": data.get("cost_usd", 0.0),
+                        }
                     runs.append(
                         {
-                            "id": data.get("run_id"),
+                            "id": data.get("run_id") or data.get("id") or p.parent.name,
                             "status": data.get("status", "unknown"),
                             "created_at": data.get("created_at", ""),
                             "companies": data.get("companies", []),
-                            "totals": data.get("counts", {}),
+                            "totals": totals,
                         }
                     )
             except Exception:
@@ -55,18 +62,25 @@ class RunStore:
         try:
             with open(summary_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                counts = data.get("counts")
+                if not isinstance(counts, dict):
+                    counts = {
+                        "mentions_count": data.get("mentions_count", 0),
+                        "attempts_count": data.get("attempts_count", 0),
+                        "cost_usd": data.get("cost_usd", 0.0),
+                    }
                 return {
-                    "id": data.get("run_id"),
+                    "id": data.get("run_id") or data.get("id") or run_id,
                     "status": data.get("status", "unknown"),
                     "created_at": data.get("created_at", ""),
                     "started_at": data.get("started_at"),
                     "finished_at": data.get("finished_at"),
                     "error": data.get("error"),
-                    "companies": data.get("companies", []),
-                    "progress": data.get("progress", {}),
-                    "counts": data.get("counts", {}),
-                    "budget_snapshot": data.get("budget_snapshot", {}),
-                    "per_source_results": data.get("per_source_results", {}),
+                    "companies": data.get("companies") or [],
+                    "progress": data.get("progress") or {},
+                    "counts": counts,
+                    "budget_snapshot": data.get("budget_snapshot") or {},
+                    "per_source_results": data.get("per_source_results") or {},
                     "task_outcomes": data.get("task_outcomes"),
                     "decisions": data.get("decisions"),
                     "invalid_companies": data.get("invalid_companies"),

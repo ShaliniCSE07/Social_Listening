@@ -47,6 +47,7 @@ export interface CreateRunRequest {
   max_age_days?: number;
   require_fresh?: boolean;
   refresh?: boolean;
+  scraping_allowed?: boolean;
 }
 
 export interface CreateRunResponse {
@@ -81,6 +82,8 @@ export interface PlanCandidate {
   estimated_cost?: number;
   conditional?: boolean;
   conditions?: string[] | null;
+  conditions_status?: Record<string, boolean | null> | null;
+  known_conditions?: Record<string, boolean> | null;
   role?: string;
 }
 
@@ -149,6 +152,14 @@ export interface CompactMention {
   method: string;
   cost: number;
   fallback_from?: string | null;
+  method_used?: string;
+  raw_payload?: {
+    page_url?: string;
+    license_note?: string;
+    attribution?: string;
+    raw_html?: string;
+    [key: string]: any;
+  } | null;
   [key: string]: any;
 }
 
@@ -171,6 +182,10 @@ export interface CollectionAttemptItem {
   reason?: string | null;
   timestamp?: string | null;
   error?: string | null;
+  scraping_checks?: Record<string, boolean> | null;
+  pages_fetched?: number;
+  pages_from_cache?: number;
+  delay_used?: number;
   [key: string]: any;
 }
 

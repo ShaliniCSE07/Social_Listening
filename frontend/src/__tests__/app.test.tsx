@@ -23,6 +23,7 @@ vi.mock("sonner", () => ({
 }));
 
 // ── Helpers ──
+import StatusBadge from "@/components/StatusBadge";
 import type {
   SourceConfigItem,
   DatasetConfigItem,
@@ -164,10 +165,8 @@ function mockFetchMultiple(handlers: Record<string, { data: any; status?: number
 // ── Tests ──
 
 describe("StatusBadge", () => {
-  it("renders the correct label and style for each status", async () => {
-    const StatusBadge = (await import("@/components/StatusBadge")).default;
-
-    const { rerender } = render(<StatusBadge status="completed" />);
+  it("renders the correct label and style for each status", () => {
+    const { rerender, unmount } = render(<StatusBadge status="completed" />);
     expect(screen.getByTestId("status-badge")).toHaveTextContent("Completed");
 
     rerender(<StatusBadge status="failed" />);
@@ -181,12 +180,13 @@ describe("StatusBadge", () => {
 
     rerender(<StatusBadge status="partial" />);
     expect(screen.getByTestId("status-badge")).toHaveTextContent("Partial");
+    unmount();
   });
 
-  it("renders unknown status as-is", async () => {
-    const StatusBadge = (await import("@/components/StatusBadge")).default;
-    render(<StatusBadge status="cancelled" />);
+  it("renders unknown status as-is", () => {
+    const { unmount } = render(<StatusBadge status="cancelled" />);
     expect(screen.getByTestId("status-badge")).toHaveTextContent("cancelled");
+    unmount();
   });
 });
 

@@ -21,6 +21,7 @@ from src.collection.agent import (
 from src.collection.base import CollectionRequest
 from src.collection.budget import BudgetTracker
 from src.collection.policy import SourcePolicy, load_source_policy
+from src.collection.policy import load_scraping_sites_cfg, platform_has_scrapable_site
 from src.contracts.enums import AttemptStatus, Method, Platform
 from src.contracts.io import write_attempts_jsonl, write_mentions_jsonl
 from src.contracts.schemas import CollectionAttempt, RawMention
@@ -66,8 +67,18 @@ def write_outputs(result: ExecutionResult, out_dir: Union[str, Path]) -> None:
     write_attempts_jsonl(out_path / "attempts.jsonl", result.attempts)
 
     summary_file = out_path / "run_summary.json"
+    data = result.to_dict()
+    if summary_file.is_file():
+        try:
+            with open(summary_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+                if isinstance(existing, dict):
+                    existing.update(data)
+                    data = existing
+        except Exception:
+            pass
     with open(summary_file, "w", encoding="utf-8") as f:
-        json.dump(result.to_dict(), f, indent=2)
+        json.dump(data, f, indent=2)
 
 
 def execute(
@@ -77,6 +88,7 @@ def execute(
     budget: Optional[BudgetTracker] = None,
     config: Optional[Dict[str, Any]] = None,
     policy: Optional[SourcePolicy] = None,
+    scraping_sites_cfg: Optional[Dict[str, Any]] = None,
 ) -> ExecutionResult:
     """Run collection decisions in order, handling fallback chains and scraping conditions."""
     cfg = config if config is not None else load_config()
@@ -91,7 +103,7 @@ def execute(
 
     # Minimum results threshold
     default_min_results = int(
-        cfg.get("collection", {}).get("min_results", cfg.get("thresholds", {}).get("min_mentions", 5))
+        cfg.get("min_results", cfg.get("collection", {}).get("min_results", cfg.get("thresholds", {}).get("min_mentions", 5)))
     )
     per_platform_min = cfg.get("collection", {}).get("platform_min_results", {})
 
@@ -226,21 +238,39 @@ def execute(
 
                         # 2a. Conditional Scraping candidate evaluation
                         if cand.method == "scraping" or c_name == "scraping":
-                            site_policy_allows = bool(
-                                pol.scraping.allows_scraping or plat_str in pol.scraping.allowed_sites
+                            # site_policy_allows: from scraping_sites.yaml (primary) or policy (legacy)
+                            if scraping_sites_cfg is not None:
+                                site_policy_allows = platform_has_scrapable_site(plat_str, scraping_sites_cfg)
+                            else:
+                                _sites = load_scraping_sites_cfg()
+                                site_policy_allows = platform_has_scrapable_site(plat_str, _sites) or bool(
+                                    pol.scraping.allows_scraping or plat_str in pol.scraping.allowed_sites
+                                )
+
+                            # other_methods_failed: every earlier candidate ended failed/rate_limited/empty
+                            if not task_attempts:
+                                # No other method was eligible at all
+                                other_methods_failed = True
+                                _omf_detail = "no other method available"
+                            else:
+                                other_methods_failed = True
+                                _omf_detail = None
+                                for prev_att in task_attempts:
+                                    if prev_att.status not in (
+                                        AttemptStatus.failed,
+                                        AttemptStatus.rate_limited,
+                                        AttemptStatus.empty,
+                                    ):
+                                        other_methods_failed = False
+                                        break
+
+                            min_scraping_thresh = (
+                                cfg.get("scraping", {}).get("min_results_threshold")
+                                if isinstance(cfg.get("scraping"), dict)
+                                else getattr(pol.scraping, "min_results_threshold", 5)
                             )
-
-                            other_methods_failed = True
-                            for prev_att in task_attempts:
-                                if prev_att.status not in (
-                                    AttemptStatus.failed,
-                                    AttemptStatus.rate_limited,
-                                    AttemptStatus.empty,
-                                ):
-                                    other_methods_failed = False
-                                    break
-
-                            min_scraping_thresh = pol.scraping.min_results_threshold
+                            if min_scraping_thresh is None:
+                                min_scraping_thresh = getattr(pol.scraping, "min_results_threshold", 5)
                             below_min_threshold = (len(task_mentions) < min_scraping_thresh)
 
                             scraping_checks = {
@@ -252,12 +282,15 @@ def execute(
                             if not all(scraping_checks.values()):
                                 now = datetime.now(timezone.utc)
                                 failed_conds = [k for k, v in scraping_checks.items() if not v]
+                                skip_reason = f"Scraping conditions not met: {', '.join(failed_conds)}"
+                                if _omf_detail:
+                                    skip_reason += f" ({_omf_detail})"
                                 att = CollectionAttempt(
                                     company=comp_name,
                                     platform=plat_enum,
                                     method=Method.scraping,
                                     status=AttemptStatus.skipped,
-                                    reason=f"Scraping conditions not met: {', '.join(failed_conds)}",
+                                    reason=skip_reason,
                                     item_count=0,
                                     cost_usd=0.0,
                                     started_at=now,
@@ -272,12 +305,15 @@ def execute(
                             conn_target = _lookup_connector(c_name, registry)
                             now_sc = datetime.now(timezone.utc)
                             if conn_target is None:
+                                reason_unimpl = "scraping not implemented yet"
+                                if _omf_detail:
+                                    reason_unimpl += f" ({_omf_detail})"
                                 att = CollectionAttempt(
                                     company=comp_name,
                                     platform=plat_enum,
                                     method=Method.scraping,
                                     status=AttemptStatus.failed,
-                                    reason="scraping not implemented yet",
+                                    reason=reason_unimpl,
                                     item_count=0,
                                     cost_usd=0.0,
                                     started_at=now_sc,
@@ -294,17 +330,32 @@ def execute(
                                 if isinstance(a_res, list):
                                     for a in a_res:
                                         a.scraping_checks = scraping_checks
+                                        if _omf_detail:
+                                            if a.reason:
+                                                if _omf_detail not in a.reason:
+                                                    a.reason = f"{a.reason} ({_omf_detail})"
+                                            else:
+                                                a.reason = _omf_detail
                                     task_attempts.extend(a_res)
                                 else:
                                     a_res.scraping_checks = scraping_checks
+                                    if _omf_detail:
+                                        if a_res.reason:
+                                            if _omf_detail not in a_res.reason:
+                                                a_res.reason = f"{a_res.reason} ({_omf_detail})"
+                                        else:
+                                            a_res.reason = _omf_detail
                                     task_attempts.append(a_res)
                             except NotImplementedError:
+                                reason_unimpl = "scraping not implemented yet"
+                                if _omf_detail:
+                                    reason_unimpl += f" ({_omf_detail})"
                                 att = CollectionAttempt(
                                     company=comp_name,
                                     platform=plat_enum,
                                     method=Method.scraping,
                                     status=AttemptStatus.failed,
-                                    reason="scraping not implemented yet",
+                                    reason=reason_unimpl,
                                     item_count=0,
                                     cost_usd=0.0,
                                     started_at=now_sc,

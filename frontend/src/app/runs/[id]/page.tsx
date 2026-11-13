@@ -25,6 +25,7 @@ import {
   Radio,
   SlidersHorizontal,
   Info,
+  X,
 } from "lucide-react";
 import {
   getRun,
@@ -105,6 +106,8 @@ export default function RunDetailPage() {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [jsonExpanded, setJsonExpanded] = useState(false);
+  const [htmlExpanded, setHtmlExpanded] = useState(false);
+  const [copiedHtml, setCopiedHtml] = useState(false);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -134,7 +137,7 @@ export default function RunDetailPage() {
     setLoadingAttempts(true);
     try {
       const data = await getAttempts(runId);
-      setAttempts(data);
+      setAttempts(Array.isArray(data) ? data : []);
     } catch {
       // Non-blocking
     } finally {
@@ -154,8 +157,8 @@ export default function RunDetailPage() {
         method: filterMethod !== "all" ? filterMethod : undefined,
         full: true,
       });
-      setMentions(res.items);
-      setTotalMentions(res.total);
+      setMentions(Array.isArray(res?.items) ? res.items : []);
+      setTotalMentions(res?.total || 0);
     } catch {
       // Non-blocking
     } finally {
@@ -193,6 +196,35 @@ export default function RunDetailPage() {
     toast.success("JSON copied to clipboard");
     setTimeout(() => setCopiedJson(false), 2000);
   };
+
+  const handleCopyRawHtml = (rawHtml: string) => {
+    navigator.clipboard.writeText(rawHtml);
+    setCopiedHtml(true);
+    toast.success("Original HTML copied to clipboard");
+    setTimeout(() => setCopiedHtml(false), 2000);
+  };
+
+  // Check if scraping returned mentions to display privacy notice
+  const hasScrapedMentions = useMemo(() => {
+    const inMentions = (mentions || []).some(
+      (m) => (m?.method || m?.method_used || "").toLowerCase() === "scraping"
+    );
+    if (inMentions) return true;
+    const inAttempts = (attempts || []).some(
+      (a) =>
+        (a?.method || "").toLowerCase() === "scraping" &&
+        ((a?.mentions_count ?? 0) > 0 || ((a as any)?.item_count ?? 0) > 0)
+    );
+    if (inAttempts) return true;
+    const perSource = run?.per_source_results || {};
+    for (const [srcName, res] of Object.entries(perSource)) {
+      if (srcName.toLowerCase().includes("scraping")) {
+        const count = (res as any)?.mentions_count ?? (res as any)?.count ?? 0;
+        if (count > 0) return true;
+      }
+    }
+    return false;
+  }, [mentions, attempts, run]);
 
   // Group attempts by company
   const attemptsByCompany = useMemo(() => {
@@ -405,6 +437,21 @@ export default function RunDetailPage() {
           { label: run.id },
         ]}
       />
+
+      {/* ── Privacy Notice Card (only when scraping returned mentions) ── */}
+      {hasScrapedMentions && (
+        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 shadow-sm" data-testid="privacy-notice-card">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+            <div className="text-xs text-blue-900 dark:text-blue-200 space-y-0.5">
+              <span className="font-semibold block">Privacy Notice</span>
+              <p>
+                Scraped content can include usernames. Personal details are masked in the processing step before sharing.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Header Card ── */}
       <Card className="shadow-sm">
@@ -698,6 +745,130 @@ export default function RunDetailPage() {
                               </span>
                             </div>
                           </div>
+
+                          {/* Scraping evaluation checks if considered or used */}
+                          {(() => {
+                            const isScrapingChosen = (t.chosen_method || "").toLowerCase() === "scraping";
+                            const isScrapingInFallback = (t.fallback_path || []).some((m) => m.toLowerCase().includes("scraping"));
+                            const matchingScrapingAttempt = attempts.find(
+                              (a) =>
+                                (a.method || "").toLowerCase() === "scraping" &&
+                                (a.company?.toLowerCase() === t.company?.toLowerCase() || !a.company) &&
+                                (a.platform?.toLowerCase() === t.platform?.toLowerCase() || !a.platform || a.platform === "other")
+                            );
+                            const consideredScraping = isScrapingChosen || isScrapingInFallback || !!matchingScrapingAttempt;
+
+                            if (!consideredScraping) return null;
+
+                            const isSkipped = matchingScrapingAttempt?.status === "skipped";
+                            const checks = matchingScrapingAttempt?.scraping_checks;
+
+                            return (
+                              <div className="pt-2 mt-2 border-t border-border/50 space-y-2" data-testid={`scraping-details-${idx}`}>
+                                <div className="flex items-center justify-between flex-wrap gap-1">
+                                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Web scraping evaluation
+                                  </span>
+                                  {isSkipped && (
+                                    <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400" data-testid="scraping-skipped-reason">
+                                      Skipped: {matchingScrapingAttempt?.reason || "Conditions not met"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Three checks rows */}
+                                <div className="space-y-1 pl-1 text-[11px]">
+                                  {/* 1. Site policy allows */}
+                                  {(() => {
+                                    const val = checks?.site_policy_allows;
+                                    const reason = val === true
+                                      ? "Site policy permits scraping for this domain"
+                                      : val === false
+                                      ? "Site policy disallows scraping for this domain"
+                                      : "Site policy check not evaluated";
+                                    return (
+                                      <div className="flex items-center gap-2" data-testid="check-site-policy">
+                                        {val === true ? (
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        ) : val === false ? (
+                                          <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                                        ) : (
+                                          <span className="font-mono text-muted-foreground w-3 text-center shrink-0">-</span>
+                                        )}
+                                        <span className="font-medium text-foreground">Site policy allows:</span>
+                                        <span className="text-muted-foreground">{reason}</span>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* 2. Other methods failed */}
+                                  {(() => {
+                                    const val = checks?.other_methods_failed;
+                                    const reason = val === true
+                                      ? (matchingScrapingAttempt?.reason?.includes("no other method available") ? "No other method available" : "Prior collection methods failed or empty")
+                                      : val === false
+                                      ? "A prior collection method succeeded"
+                                      : "Other methods status not evaluated";
+                                    return (
+                                      <div className="flex items-center gap-2" data-testid="check-other-methods">
+                                        {val === true ? (
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        ) : val === false ? (
+                                          <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                                        ) : (
+                                          <span className="font-mono text-muted-foreground w-3 text-center shrink-0">-</span>
+                                        )}
+                                        <span className="font-medium text-foreground">Other methods failed:</span>
+                                        <span className="text-muted-foreground">{reason}</span>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* 3. Below min threshold */}
+                                  {(() => {
+                                    const val = checks?.below_min_threshold;
+                                    const reason = val === true
+                                      ? "Collected items are below the minimum threshold"
+                                      : val === false
+                                      ? "Collected items already meet or exceed the threshold"
+                                      : "Threshold check not evaluated";
+                                    return (
+                                      <div className="flex items-center gap-2" data-testid="check-below-threshold">
+                                        {val === true ? (
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        ) : val === false ? (
+                                          <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                                        ) : (
+                                          <span className="font-mono text-muted-foreground w-3 text-center shrink-0">-</span>
+                                        )}
+                                        <span className="font-medium text-foreground">Below minimum threshold:</span>
+                                        <span className="text-muted-foreground">{reason}</span>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+
+                                {/* Execution metrics if attempt ran */}
+                                {!isSkipped && (
+                                  (matchingScrapingAttempt?.pages_fetched !== undefined ||
+                                   matchingScrapingAttempt?.pages_from_cache !== undefined ||
+                                   matchingScrapingAttempt?.delay_used !== undefined) && (
+                                    <div className="flex items-center gap-4 text-[11px] text-muted-foreground pt-1 flex-wrap border-t border-border/30" data-testid="scraping-run-metrics">
+                                      {matchingScrapingAttempt?.pages_fetched !== undefined && (
+                                        <span>Pages fetched: <strong className="text-foreground">{matchingScrapingAttempt.pages_fetched}</strong></span>
+                                      )}
+                                      {matchingScrapingAttempt?.pages_from_cache !== undefined && (
+                                        <span>Pages from cache: <strong className="text-foreground">{matchingScrapingAttempt.pages_from_cache}</strong></span>
+                                      )}
+                                      {matchingScrapingAttempt?.delay_used !== undefined && (
+                                        <span>Delay used: <strong className="text-foreground">{matchingScrapingAttempt.delay_used}s</strong></span>
+                                      )}
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div className="text-right sm:self-center shrink-0">
@@ -927,23 +1098,35 @@ export default function RunDetailPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <Badge variant="outline" className="text-xs uppercase">
-                                {item.method || "api"}
-                              </Badge>
+                              {(item.method === "scraping" || item.method_used === "scraping") ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs uppercase bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                  data-testid="method-badge-scraped"
+                                >
+                                  Web scraped
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs uppercase">
+                                  {item.method || "api"}
+                                </Badge>
+                              )}
                               {item.fallback_from && (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 hover:bg-amber-100 cursor-help"
-                                        data-testid="fallback-badge"
-                                      >
-                                        via fallback
-                                      </Badge>
+                                      <span className="inline-flex cursor-help">
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 hover:bg-amber-100"
+                                          data-testid="fallback-badge"
+                                        >
+                                          via fallback
+                                        </Badge>
+                                      </span>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>Failed first: {item.fallback_from}</p>
+                                      <p>Failed first: {formatConnectorName(item.fallback_from) || item.fallback_from}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
@@ -1058,6 +1241,61 @@ export default function RunDetailPage() {
                                 <p className="text-xs text-muted-foreground italic">
                                   {att.reason}
                                 </p>
+                              )}
+
+                              {/* Scraping checks chips */}
+                              {att.method?.toLowerCase() === "scraping" && (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-1" data-testid="attempt-scraping-checks">
+                                  <span className="text-[11px] text-muted-foreground font-medium">Checks:</span>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${
+                                      att.scraping_checks?.site_policy_allows
+                                        ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400"
+                                        : "border-rose-500/50 text-rose-700 dark:text-rose-400"
+                                    }`}
+                                    data-testid="chip-policy"
+                                  >
+                                    {att.scraping_checks?.site_policy_allows ? (
+                                      <Check className="h-2.5 w-2.5" />
+                                    ) : (
+                                      <X className="h-2.5 w-2.5" />
+                                    )}
+                                    policy
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${
+                                      att.scraping_checks?.other_methods_failed
+                                        ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400"
+                                        : "border-rose-500/50 text-rose-700 dark:text-rose-400"
+                                    }`}
+                                    data-testid="chip-other-methods"
+                                  >
+                                    {att.scraping_checks?.other_methods_failed ? (
+                                      <Check className="h-2.5 w-2.5" />
+                                    ) : (
+                                      <X className="h-2.5 w-2.5" />
+                                    )}
+                                    other methods
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${
+                                      att.scraping_checks?.below_min_threshold
+                                        ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400"
+                                        : "border-rose-500/50 text-rose-700 dark:text-rose-400"
+                                    }`}
+                                    data-testid="chip-threshold"
+                                  >
+                                    {att.scraping_checks?.below_min_threshold ? (
+                                      <Check className="h-2.5 w-2.5" />
+                                    ) : (
+                                      <X className="h-2.5 w-2.5" />
+                                    )}
+                                    threshold
+                                  </Badge>
+                                </div>
                               )}
                             </div>
 
@@ -1222,6 +1460,105 @@ export default function RunDetailPage() {
                   </span>
                 </div>
               )}
+
+              {/* Scraped metadata from raw_payload: page_url, license_note, attribution */}
+              {(() => {
+                const payload = selectedMention.raw_payload || {};
+                const pageUrl = payload.page_url || selectedMention.page_url;
+                const licenseNote = payload.license_note || selectedMention.license_note;
+                const attribution = payload.attribution || selectedMention.attribution;
+                const rawHtml = payload.raw_html || selectedMention.raw_html;
+
+                return (
+                  <>
+                    {(pageUrl || licenseNote || attribution) && (
+                      <div className="p-3 rounded-lg border border-border bg-card space-y-2 text-xs" data-testid="scraped-metadata">
+                        {pageUrl && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-muted-foreground w-24 shrink-0">Page URL:</span>
+                            <a
+                              href={pageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline truncate inline-flex items-center gap-1"
+                              data-testid="scraped-page-url"
+                            >
+                              {pageUrl}
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          </div>
+                        )}
+                        {licenseNote && (
+                          <div className="flex items-center gap-2" data-testid="scraped-license-note">
+                            <span className="font-semibold text-muted-foreground w-24 shrink-0">Licence note:</span>
+                            <span className="text-foreground">{licenseNote}</span>
+                          </div>
+                        )}
+                        {attribution && (
+                          <div className="flex items-center gap-2" data-testid="scraped-attribution">
+                            <span className="font-semibold text-muted-foreground w-24 shrink-0">Attribution:</span>
+                            <span className="text-foreground">{attribution}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Collapsible Original HTML block (text only, never live HTML) */}
+                    {rawHtml && (
+                      <div className="p-3 rounded-lg border border-border bg-card space-y-2 text-xs" data-testid="scraped-raw-html-block">
+                        <div className="flex items-center justify-between">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setHtmlExpanded(!htmlExpanded)}
+                            className="text-xs h-7 px-2 font-medium"
+                            data-testid="toggle-raw-html-btn"
+                          >
+                            {htmlExpanded ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                                Hide Original HTML
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                                Original HTML
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopyRawHtml(rawHtml)}
+                            className="h-7 text-xs px-2"
+                            data-testid="copy-raw-html-btn"
+                          >
+                            {copiedHtml ? (
+                              <>
+                                <Check className="h-3 w-3 mr-1 text-emerald-500" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copy HTML
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {htmlExpanded && (
+                          <pre className="p-3 rounded-md bg-muted/60 text-foreground font-mono text-[11px] overflow-x-auto max-h-64 whitespace-pre-wrap select-text" data-testid="raw-html-content">
+                            <code>{rawHtml}</code>
+                          </pre>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Full Text Content */}
               <div>

@@ -17,6 +17,7 @@ from src.collection.common.dates import to_utc
 from src.collection.planner import Task
 from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
 from src.collection.policy import PolicyCandidate, SourcePolicy, load_source_policy
+from src.collection.policy import load_scraping_sites_cfg, platform_has_scrapable_site
 from src.contracts.enums import Platform
 
 
@@ -58,6 +59,8 @@ class Candidate:
     estimated_cost: float = 0.0
     conditional: bool = False
     conditions: Optional[List[str]] = None
+    conditions_status: Optional[Dict[str, Optional[bool]]] = None
+    known_conditions: Optional[Dict[str, bool]] = None
     role: str = "first_choice"
 
 
@@ -142,6 +145,7 @@ def decide(
     policy: Optional[SourcePolicy] = None,
     prefer_paid: bool = False,
     history_only: bool = False,
+    scraping_sites_cfg: Optional[Dict[str, Any]] = None,
 ) -> Decision:
     """Decide which collection methods to try and in what order for a given task."""
     pol = policy if policy is not None else load_source_policy()
@@ -195,13 +199,16 @@ def decide(
             if conn_inst is None:
                 rejected.append(Rejected(c_name, "not implemented yet"))
                 continue
-            if not pol.scraping.allows_scraping and plat_str not in pol.scraping.allowed_sites:
-                rejected.append(
-                    Rejected(
-                        c_name,
-                        f"Site or platform policy does not allow scraping for '{plat_str}' (allows_scraping is False)",
-                    )
+            # Check scraping_sites.yaml (primary) then fall back to policy (legacy/tests)
+            if scraping_sites_cfg is not None:
+                _site_ok = platform_has_scrapable_site(plat_str, scraping_sites_cfg)
+            else:
+                _sites = load_scraping_sites_cfg()
+                _site_ok = platform_has_scrapable_site(plat_str, _sites) or bool(
+                    pol.scraping.allows_scraping or plat_str in pol.scraping.allowed_sites
                 )
+            if not _site_ok:
+                rejected.append(Rejected(c_name, "scraping not allowed for this run"))
                 continue
         else:
             # 1. Unbuilt check
@@ -277,6 +284,14 @@ def decide(
         is_third_party = "third_party" in c_name.lower() or (cand.role == "backup" and cand.method == "api")
 
         if is_scraping:
+            # Determine site_policy_allows status at plan time
+            if scraping_sites_cfg is not None:
+                _spa = platform_has_scrapable_site(plat_str, scraping_sites_cfg)
+            else:
+                _sites = load_scraping_sites_cfg()
+                _spa = platform_has_scrapable_site(plat_str, _sites) or bool(
+                    pol.scraping.allows_scraping or plat_str in pol.scraping.allowed_sites
+                )
             c_obj = Candidate(
                 connector=c_name,
                 method=cand.method,
@@ -285,6 +300,14 @@ def decide(
                 estimated_cost=cost,
                 conditional=True,
                 conditions=["site_policy_allows", "other_methods_failed", "below_min_threshold"],
+                conditions_status={
+                    "site_policy_allows": _spa,
+                    "other_methods_failed": None,   # not known at plan time
+                    "below_min_threshold": None,     # not known at plan time
+                },
+                known_conditions={
+                    "site_policy_allows": _spa,
+                },
                 role=cand.role,
             )
             tier = 99  # Scraping is ALWAYS last
@@ -370,6 +393,7 @@ def plan_decisions(
     policy: Optional[SourcePolicy] = None,
     prefer_paid: bool = False,
     history_only: bool = False,
+    scraping_sites_cfg: Optional[Dict[str, Any]] = None,
 ) -> List[Decision]:
     """Evaluate decisions for all tasks in a collection plan in stable order."""
     decisions: List[Decision] = []
@@ -391,6 +415,7 @@ def plan_decisions(
             policy=policy,
             prefer_paid=prefer_paid,
             history_only=history_only,
+            scraping_sites_cfg=scraping_sites_cfg,
         )
         decisions.append(decision)
 

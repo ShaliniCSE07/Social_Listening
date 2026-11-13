@@ -11,6 +11,7 @@ from src.collection.base import BaseConnector, CollectionRequest
 from src.collection.budget import BudgetTracker
 from src.collection.executor import ExecutionResult, TaskOutcome, execute, write_outputs
 from src.collection.planner import InvalidCompany, Plan, Planner
+from src.collection.policy import load_scraping_sites_cfg
 from src.contracts.enums import AttemptStatus, Method, Platform
 from src.contracts.schemas import CollectionAttempt, RawMention
 from src.service.models import CreateRunRequest
@@ -152,8 +153,8 @@ class RunRunner:
                 "scraping_allowed": bool(getattr(request, "scraping_allowed", False)),
             }
             if request.sources:
-                if request.sources.api is not None:
-                    planner_input["platforms"] = list(request.sources.api)
+                # Always pass platforms explicitly so planner never falls back to defaults
+                planner_input["platforms"] = list(request.sources.api) if request.sources.api is not None else []
                 if request.sources.dataset_keys is not None:
                     planner_input["dataset_keys"] = list(request.sources.dataset_keys)
 
@@ -214,11 +215,13 @@ class RunRunner:
                 if self.connector_classes
                 else None
             )
+            sites_cfg = load_scraping_sites_cfg()
             decisions = plan_decisions(
                 plan_obj,
                 registry=registry,
                 budget=tracker,
                 policy=self.policy,
+                scraping_sites_cfg=sites_cfg,
             )
 
             # 4. Executor execution
@@ -228,6 +231,7 @@ class RunRunner:
                 registry=registry,
                 budget=tracker,
                 policy=self.policy,
+                scraping_sites_cfg=sites_cfg,
             )
 
             # 5. Write artifacts under data/runs/<run_id>/ using write_outputs

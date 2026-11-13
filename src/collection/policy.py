@@ -1,6 +1,7 @@
 """Source policy model and loader.
 
 Loads and validates data-driven source selection rules from config/plugins/source_policy.yaml.
+Also provides helpers to load per-site scraping permissions from config/plugins/scraping_sites.yaml.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 from config.settings import CONFIG_DIR
+
+_SCRAPING_SITES_PATH = CONFIG_DIR / "plugins" / "scraping_sites.yaml"
 
 VALID_METHODS = {"api", "dataset", "scraping"}
 VALID_COST_CLASSES = {"free", "paid", "approval"}
@@ -157,4 +160,36 @@ def load_source_policy(path: Optional[Union[str, Path]] = None) -> SourcePolicy:
     )
 
     return SourcePolicy(platforms=parsed_platforms, scraping=scraping_obj)
+
+
+def load_scraping_sites_cfg(path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Load the scraping sites YAML config and return it as a dict keyed by site key.
+
+    Each value is a dict with at minimum 'platform' and 'allows_scraping' fields.
+    Returns an empty dict if the file is missing (graceful degradation).
+    """
+    sites_file = Path(path) if path is not None else _SCRAPING_SITES_PATH
+    if not sites_file.is_file():
+        return {}
+    with open(sites_file, "r", encoding="utf-8-sig") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def platform_has_scrapable_site(platform_str: str, sites_cfg: Dict[str, Any]) -> bool:
+    """Return True if any site in sites_cfg has the given platform and allows_scraping=True.
+
+    Args:
+        platform_str: Platform name string (e.g. 'news_blog', 'reddit').
+        sites_cfg: Dict returned by load_scraping_sites_cfg().
+    """
+    for _key, site in sites_cfg.items():
+        if not isinstance(site, dict):
+            continue
+        if str(site.get("platform", "")).lower() == platform_str.lower():
+            if bool(site.get("allows_scraping", False)):
+                return True
+    return False
 

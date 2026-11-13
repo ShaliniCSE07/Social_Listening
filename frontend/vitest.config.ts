@@ -12,8 +12,9 @@ export default defineConfig({
   },
   test: {
     root: __dirname,
-    environment: "jsdom",
+    environment: "./src/test-env.ts",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    testTimeout: 20000,
   },
 });

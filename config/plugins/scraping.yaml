@@ -1,7 +1,7 @@
-# Scraping plugin configuration placeholder
-# Future keys for three-condition gate, user-agent rotation, and proxies
-min_results_threshold: 5
-request_timeout: 15
-user_agent_rotation: true
-robots_txt_strict: true
-
+# Scraping plugin configuration
+# Tunable values for the scraping connector
+cache_ttl_hours: 24  # hours to keep cached pages before refetching
+request_timeout: 15  # seconds for HTTP requests
+max_retries: 2       # number of retries for 5xx or timeout errors
+default_min_delay_seconds: 5  # minimum delay between requests (seconds)
+max_pages_hard_limit: 20  # absolute hard limit on pages per site per run

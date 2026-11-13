@@ -10,6 +10,7 @@ from src.collection.agent import plan_decisions
 from src.collection.budget import BudgetTracker
 from src.collection.planner import Planner
 from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
+from src.collection.policy import load_scraping_sites_cfg
 from src.contracts.enums import Platform
 from src.service.models import (
     CreateRunRequest,
@@ -58,8 +59,8 @@ def _generate_plan(request: CreateRunRequest) -> PlanResponse:
         "scraping_allowed": bool(getattr(request, "scraping_allowed", False)),
     }
     if request.sources:
-        if request.sources.api is not None:
-            planner_input["platforms"] = list(request.sources.api)
+        # Always pass platforms explicitly so planner never falls back to defaults
+        planner_input["platforms"] = list(request.sources.api) if request.sources.api is not None else []
         if request.sources.dataset_keys is not None:
             planner_input["dataset_keys"] = list(request.sources.dataset_keys)
 
@@ -67,7 +68,8 @@ def _generate_plan(request: CreateRunRequest) -> PlanResponse:
     plan_obj = planner.plan(planner_input)
 
     tracker = BudgetTracker(limit_usd=request.budget_usd) if request.budget_usd is not None else None
-    decisions = plan_decisions(plan_obj, registry=None, budget=tracker)
+    sites_cfg = load_scraping_sites_cfg()
+    decisions = plan_decisions(plan_obj, registry=None, budget=tracker, scraping_sites_cfg=sites_cfg)
 
     decisions_data = [d.to_dict() for d in decisions]
     sanitized_decisions = sanitize_obj(decisions_data)
@@ -121,6 +123,14 @@ def _validate_run_request(request: CreateRunRequest) -> None:
                         status_code=422,
                         detail=f"Unknown dataset key: '{key}'. Dataset not found in catalogue.",
                     )
+        # Require at least one source chosen
+        has_api = bool(request.sources.api)
+        has_datasets = bool(request.sources.dataset_keys)
+        if not has_api and not has_datasets:
+            raise HTTPException(
+                status_code=422,
+                detail="Choose at least one source",
+            )
 
 
 @router.post("", response_model=CreateRunResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -177,6 +187,8 @@ def get_run(run_id: str) -> RunDetailResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Run '{run_id}' not found",
         )
+    if not run_data.get("id"):
+        run_data["id"] = run_id
     return RunDetailResponse(**run_data)
 
 
