@@ -79,7 +79,7 @@ def process_mentions(
 ) -> dict:
     """
     Input: Member 1 handoff files (parsed lists) + run_id + company industry mapping
-    Output: {"records": [...], "report": {...}, "counters": {...}}
+    Output: {"records": [...], "inserted": ..., "updated": ..., "report": {...}, "counters": {...}}
     """
     db = get_db()
     grouped: dict[str, list[RawMention]] = defaultdict(list)
@@ -150,9 +150,27 @@ def process_mentions(
                 counters["incomplete"] += 1
 
             # ---- Build record ----
-            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, "", mapped["posted_at"]) # Pass empty string instead of text
+            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, "", mapped["posted_at"])
+            record_id = f"{mid}:{company_id}"
+
+            # Check existing record in DB for version history (FR-DLT-08)
+            existing = db.records.find_one({"record_id": record_id}, sort=[("version", -1)])
+            if existing:
+                if existing.get("text") == masked_text:
+                    counters["duplicates"] += 1
+                    continue
+                else:
+                    is_update = True
+                    version = existing.get("version", 1) + 1
+                    supersedes = f"{record_id}:v{existing.get('version', 1)}"
+                    counters["updated"] += 1
+            else:
+                is_update = False
+                version = 1
+                supersedes = None
+
             rec = SoclRecord(
-                record_id=f"{mid}:{company_id}",
+                record_id=record_id,
                 mention_id=mid,
                 company=company,
                 company_id=company_id,
@@ -177,16 +195,16 @@ def process_mentions(
                 collected_at=raw.collected_at,
                 run_id=run_id,
                 load_type=(windows or {}).get((company, raw.platform.value), {}).get("load_type", load_type),
-                is_update=False,
+                is_update=is_update,
                 fingerprint=_fingerprint(raw.raw_payload.get("body", "") + raw.raw_payload.get("updated", ""), mapped.get("posted_at")),
-                version=1,
-                supersedes=None,
+                version=version,
+                supersedes=supersedes,
                 incomplete=incomplete,
                 company_match="confirmed",
             )
             all_records.append(rec)
 
-        # ---- Save (FR-PRC-12) — idempotent per record (PRD NFR-IDM) ----
+    # ---- Save (FR-PRC-12) — idempotent per record (PRD NFR-IDM) ----
     inserted = 0
     if all_records:
         from pymongo.errors import DuplicateKeyError
@@ -203,6 +221,7 @@ def process_mentions(
     return {
         "records": all_records,
         "inserted": inserted,
+        "updated": counters["updated"],
         "report": report,
         "counters": counters,
     }

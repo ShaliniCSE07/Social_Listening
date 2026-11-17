@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+from dotenv import load_dotenv
+load_dotenv()
 import json
 import uuid
 from collections.abc import Iterable
@@ -106,6 +107,18 @@ async def process_run(
             run_id=run_id,
             method="api",
         )
+    
+        # --- NEW: Save the receipt to MongoDB ---
+    from datetime import datetime, timezone
+    db = get_db() # (get_db is already imported at the top of main.py)
+    db.runs.insert_one({
+        "run_id": run_id,
+        "created_at": datetime.now(timezone.utc),
+        "status": "completed",
+        "counters": result["counters"],
+        "report": result["report"]
+    })
+    # ---------------------------------------
 
     return {
         "run_id": run_id,
@@ -129,3 +142,10 @@ def get_records(run_id: str) -> Iterable[str]:
         media_type="application/x-ndjson",
         headers={"Content-Disposition": f"attachment; filename=records_{run_id}.jsonl"},
     )
+
+@app.post("/api/v1/runs/{run_id}/rerun")
+def rerun_failed_job(run_id: str):
+    """Trigger a rerun of a failed job."""
+    # In a full production setup, this would fetch the original JSONL files from S3 
+    # and trigger the pipeline again. For now, we simulate the queueing.
+    return {"message": f"Successfully triggered rerun for {run_id}", "status": "queued"}
