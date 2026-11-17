@@ -1,0 +1,12 @@
+{
+  "industries": {
+    "Food delivery": [
+      {"name": "Zomato", "alt_spellings": ["Zomato Ltd", "Eternal"]},
+      "Swiggy"
+    ],
+    "Automotive": [
+      {"name": "Tata Motors", "alt_spellings": ["Tata"], "branches": ["Pune showroom"]}
+    ]
+  },
+  "dataset_keys": ["sample_reviews_local"]
+}

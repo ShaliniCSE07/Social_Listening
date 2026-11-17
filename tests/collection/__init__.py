@@ -1,0 +1,2 @@
+"""Collection tests package initialization."""
+

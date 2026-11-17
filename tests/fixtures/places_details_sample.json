@@ -1,0 +1,50 @@
+{
+  "name": "places/ChIJN1t_tDeuEmsRUsoyG83frY4",
+  "id": "ChIJN1t_tDeuEmsRUsoyG83frY4",
+  "displayName": {
+    "text": "Tata Motors Dealership",
+    "languageCode": "en"
+  },
+  "formattedAddress": "Sector 34, Gurugram, Haryana, India",
+  "reviews": [
+    {
+      "name": "places/ChIJN1t_tDeuEmsRUsoyG83frY4/reviews/rev1",
+      "relativePublishTimeDescription": "a month ago",
+      "rating": 5,
+      "text": {
+        "text": "Excellent service at Tata Motors Gurugram branch!",
+        "languageCode": "en"
+      },
+      "originalText": {
+        "text": "Excellent service at Tata Motors Gurugram branch!",
+        "languageCode": "en"
+      },
+      "authorAttribution": {
+        "displayName": "Rahul Kumar",
+        "uri": "https://maps.google.com/contrib/123",
+        "photoUri": "https://lh3.googleusercontent.com/photo1"
+      },
+      "publishTime": "2026-10-15T09:30:00Z"
+    },
+    {
+      "name": "places/ChIJN1t_tDeuEmsRUsoyG83frY4/reviews/rev2",
+      "relativePublishTimeDescription": "2 weeks ago",
+      "rating": 4,
+      "text": {
+        "text": "Good experience buying my new EV car.",
+        "languageCode": "en"
+      },
+      "originalText": {
+        "text": "Good experience buying my new EV car.",
+        "languageCode": "en"
+      },
+      "authorAttribution": {
+        "displayName": "Priya Sharma",
+        "uri": "https://maps.google.com/contrib/456",
+        "photoUri": "https://lh3.googleusercontent.com/photo2"
+      },
+      "publishTime": "2026-10-25T14:15:00Z"
+    }
+  ]
+}
+

@@ -1,0 +1,33 @@
+<html><head><title>Test Story Title</title></head><body>
+<table>
+  <!-- Story row -->
+  <tr class="fatitem">
+    <td class="title"><a href="https://example.com/article" class="storylink">Test Story Title</a></td>
+  </tr>
+  <tr>
+    <td class="subtext">
+      <span class="score">42 points</span>
+      <a href="user?id=author" class="hnuser">testauthor</a>
+      <span class="age">2 hours ago</span>
+    </td>
+  </tr>
+  <!-- Comment 1 -->
+  <tr class="comment" id="cmt1" data-parent="123456">
+    <td>
+      <img class="indent" src="s.gif" width="0" />
+      <a href="user?id=commenter1" class="hnuser">commenter1</a>
+      <span class="age">1 hour ago</span>
+      <span class="commtext">First comment text</span>
+    </td>
+  </tr>
+  <!-- Comment 2 (reply to comment1) -->
+  <tr class="comment" id="cmt2" data-parent="cmt1">
+    <td>
+      <img class="indent" src="s.gif" width="40" />
+      <a href="user?id=commenter2" class="hnuser">commenter2</a>
+      <span class="age">30 minutes ago</span>
+      <span class="commtext">Second comment text</span>
+    </td>
+  </tr>
+</table>
+</body></html>

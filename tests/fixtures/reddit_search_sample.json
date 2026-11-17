@@ -1,0 +1,61 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_page2cursor",
+    "dist": 3,
+    "modhash": null,
+    "geo_filter": "",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_item1",
+          "id": "item1",
+          "title": "Tata Motors launches new EV model in India",
+          "selftext": "Tata Motors announced the new vehicle with impressive battery range.",
+          "author": "auto_enthusiast",
+          "subreddit": "cars",
+          "permalink": "/r/cars/comments/item1/tata_motors_launches_new_ev/",
+          "url": "https://www.reddit.com/r/cars/comments/item1/tata_motors_launches_new_ev/",
+          "score": 150,
+          "created_utc": 1762500000.0,
+          "num_comments": 45
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_item2",
+          "id": "item2",
+          "title": "Discussion on Tata manufacturing updates",
+          "selftext": "Here are the latest production numbers for Tata plants.",
+          "author": "industry_watcher",
+          "subreddit": "india",
+          "permalink": "/r/india/comments/item2/discussion_on_tata_manufacturing/",
+          "url": "https://www.reddit.com/r/india/comments/item2/discussion_on_tata_manufacturing/",
+          "score": 85,
+          "created_utc": 1762490000.0,
+          "num_comments": 20
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "name": "t3_item3",
+          "id": "item3",
+          "title": "Completely unrelated news post about space exploration",
+          "selftext": "Astronomers discovered a new exoplanet today with fascinating features.",
+          "author": "stargazer",
+          "subreddit": "space",
+          "permalink": "/r/space/comments/item3/unrelated_news_post/",
+          "url": "https://www.reddit.com/r/space/comments/item3/unrelated_news_post/",
+          "score": 320,
+          "created_utc": 1762480000.0,
+          "num_comments": 80
+        }
+      }
+    ],
+    "before": null
+  }
+}
+
