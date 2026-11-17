@@ -100,6 +100,7 @@ python -m src.collection.executor --input targets.json --out data/output
   2. `other_methods_failed`: Every earlier method was attempted and ended `failed`, `rate_limited`, or `empty` (or if no earlier method was eligible, recorded as `true` with detail `"no other method available"`).
   3. `below_min_threshold`: Collected items so far < `scraping.min_results_threshold` (default 5).
   All three boolean checks are recorded in `attempt.scraping_checks`. Any `false` check skips execution without fetching.
+- **Polite Crawling**: Each site's `robots.txt` is read once per run. Disallowed paths are skipped, and the wait between pages is the larger of the site's `min_delay_seconds` and the `robots.txt` `Crawl-delay` (Hacker News: 30 seconds, so a 5-page scrape takes about 2 minutes). If `robots.txt` returns 401/403, nothing is fetched.
 - **Fallback Provenance**: When scraping succeeds, its `RawMention` records carry `fallback_from` indicating the prior method that failed or fell short.
 - **Service Plan Transparency**: `POST /api/plan` respects `scraping_allowed` and surfaces scraping candidates as `conditional: true` with the three conditions and known plan-time status.
 

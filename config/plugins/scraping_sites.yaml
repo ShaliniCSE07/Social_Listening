@@ -37,7 +37,7 @@
 #     - /newest
 #     - /item
 #   max_pages: 5
-#   min_delay_seconds: 5
+#   min_delay_seconds: 30  # robots.txt Crawl-delay: 30
 #   parser: hackernews
 #   license_note: ""
 #   attribution: ""
@@ -61,7 +61,7 @@ hackernews:
     - /newest
     - /item
   max_pages: 5
-  min_delay_seconds: 5
+  min_delay_seconds: 30  # robots.txt Crawl-delay: 30
   parser: hackernews
   license_note: ""
   attribution: ""
