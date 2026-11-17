@@ -27,11 +27,12 @@ class HackerNewsParser(Parser):
         # the second with class 'subtext'.
         for story in soup.select('tr.athing'):
             story_id = story.get('id')
-            title_tag = story.select_one('a.storylink')
+            title_tag = story.select_one('.titleline a') or story.select_one('a.storylink')
             title = title_tag.get_text(strip=True) if title_tag else ''
             link = title_tag['href'] if title_tag and title_tag.has_attr('href') else ''
             # Subtext row follows the story row
-            subtext = story.find_next_sibling('tr').select_one('td.subtext')
+            next_tr = story.find_next_sibling('tr')
+            subtext = next_tr.select_one('td.subtext') if next_tr else None
             points = 0
             author = ''
             age = ''

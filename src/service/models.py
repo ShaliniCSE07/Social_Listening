@@ -126,6 +126,17 @@ class PlanResponse(BaseModel):
     invalid: Optional[List[Dict[str, Any]]] = None
 
 
+class ScrapingSiteConfigItem(BaseModel):
+    key: str
+    name: str
+    platform: str
+    allows_scraping: bool
+    license_note: Optional[str] = None
+    attribution: Optional[str] = None
+    can_run: bool
+    reason: str
+
+
 class PaginatedMentionsResponse(BaseModel):
     items: List[Union[CompactMention, Dict[str, Any]]]
     total: int

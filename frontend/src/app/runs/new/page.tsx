@@ -262,8 +262,8 @@ export default function NewRunWizardPage() {
   }, [companies]);
 
   const isStep2Valid = useMemo(() => {
-    return selectedPlatforms.size > 0 || selectedDatasets.size > 0;
-  }, [selectedPlatforms, selectedDatasets]);
+    return selectedPlatforms.size > 0 || selectedDatasets.size > 0 || scrapingAllowed;
+  }, [selectedPlatforms, selectedDatasets, scrapingAllowed]);
 
   const isStep3Valid = true; // Options are optional
 
@@ -301,6 +301,8 @@ export default function NewRunWizardPage() {
       payload.sources = {};
       if (apiPlats.length) payload.sources.api = apiPlats;
       if (dsKeys.length) payload.sources.dataset_keys = dsKeys;
+    } else if (scrapingAllowed) {
+      payload.sources = { api: ["news_blog"] };
     }
 
     if (budgetUsd) payload.budget_usd = parseFloat(budgetUsd);

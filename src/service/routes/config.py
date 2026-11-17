@@ -1,4 +1,5 @@
 """Configuration query endpoints for available sources and datasets."""
+import os
 from typing import List
 from fastapi import APIRouter
 
@@ -7,7 +8,7 @@ from src.collection.base import CollectionRequest
 from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
 from src.collection.registry import get_all_connectors
 from src.contracts.enums import Method
-from src.service.models import DatasetConfigItem, SourceConfigItem
+from src.service.models import DatasetConfigItem, ScrapingSiteConfigItem, SourceConfigItem
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -32,7 +33,7 @@ def _redact_secrets(text: str) -> str:
 def get_sources() -> List[SourceConfigItem]:
     """Return available methods and connectors with enabled and can_run statuses."""
     items: List[SourceConfigItem] = []
-    dummy_request = CollectionRequest(company="ProbeCompany")
+    dummy_request = CollectionRequest(company="ProbeCompany", scraping_allowed=True)
 
     for cls in get_all_connectors():
         try:
@@ -45,8 +46,6 @@ def get_sources() -> List[SourceConfigItem]:
             method_str = conn_method.value if hasattr(conn_method, "value") else str(conn_method)
             cfg = load_plugin_config(method_str)
             enabled = bool(cfg.get("enabled", True))
-            if conn_method == Method.scraping:
-                enabled = False
 
             # Check can_run
             try:
@@ -87,6 +86,54 @@ def get_datasets() -> List[DatasetConfigItem]:
                 enabled=entry.enabled,
                 last_updated=entry.last_updated_override,
                 license_note=entry.license_note,
+            )
+        )
+
+    return items
+
+
+@router.get("/scraping-sites", response_model=List[ScrapingSiteConfigItem])
+def get_scraping_sites() -> List[ScrapingSiteConfigItem]:
+    """Return per-site scraping configuration.
+
+    Reads config/plugins/scraping_sites.yaml via the existing loader.
+    Never returns secret values or start_urls or policy details.
+    Returns an empty list when the file is missing or empty.
+    """
+    raw: dict = load_plugin_config("scraping_sites")
+    if not raw:
+        return []
+
+    contact_set: bool = bool(os.environ.get("SCRAPER_CONTACT", "").strip())
+    items: List[ScrapingSiteConfigItem] = []
+
+    for key, site in raw.items():
+        if not isinstance(site, dict):
+            continue
+
+        allows: bool = bool(site.get("allows_scraping", False))
+
+        # Determine can_run and reason without exposing any secret value
+        if not allows:
+            can_run = False
+            reason = "scraping not allowed for this site"
+        elif not contact_set:
+            can_run = False
+            reason = "SCRAPER_CONTACT not set"
+        else:
+            can_run = True
+            reason = ""
+
+        items.append(
+            ScrapingSiteConfigItem(
+                key=str(site.get("key", key)),
+                name=str(site.get("name", key)),
+                platform=str(site.get("platform", "")),
+                allows_scraping=allows,
+                license_note=site.get("license_note") or None,
+                attribution=site.get("attribution") or None,
+                can_run=can_run,
+                reason=reason,
             )
         )
 

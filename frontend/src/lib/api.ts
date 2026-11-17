@@ -15,6 +15,17 @@ export interface SourceConfigItem {
   reason: string;
 }
 
+export interface ScrapingSiteConfigItem {
+  key: string;
+  name: string;
+  platform: string;
+  allows_scraping: boolean;
+  license_note?: string | null;
+  attribution?: string | null;
+  can_run: boolean;
+  reason: string;
+}
+
 export interface DatasetConfigItem {
   key: string;
   name: string;
@@ -293,6 +304,10 @@ export async function getSources(): Promise<SourceConfigItem[]> {
 
 export async function getDatasets(): Promise<DatasetConfigItem[]> {
   return apiFetch<DatasetConfigItem[]>("/api/config/datasets");
+}
+
+export async function getScrapingSites(): Promise<ScrapingSiteConfigItem[]> {
+  return apiFetch<ScrapingSiteConfigItem[]>("/api/config/scraping-sites");
 }
 
 export async function createRun(data: CreateRunRequest): Promise<CreateRunResponse> {
