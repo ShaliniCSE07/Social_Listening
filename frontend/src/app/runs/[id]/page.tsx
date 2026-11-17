@@ -48,6 +48,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ErrorBox from "@/components/ErrorBox";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
+import ProcessingGateway from "@/components/ProcessingGateway";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -538,6 +539,13 @@ export default function RunDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Gateway to the data processing step (Member 2) ── */}
+      <ProcessingGateway
+        runId={run.id}
+        runStatus={run.status}
+        mentionsCount={run.counts?.mentions_count ?? 0}
+      />
 
       {/* ── Invalid Companies Warning Box ── */}
       {run.invalid_companies && run.invalid_companies.length > 0 && (
