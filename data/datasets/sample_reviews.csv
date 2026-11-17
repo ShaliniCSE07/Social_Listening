@@ -1,0 +1,61 @@
+review_id,company,branch,review_text,review_date,rating,author,url
+R0037,Tata Motors,Pune showroom,The Nexon feels solid and safe.,2024-02-22T07:27:00Z,5,user_4484,https://example.com/reviews/tata-motors/R0037
+R0022,Swiggy,Hyderabad,Swiggy One saves me money every week.,2026-09-12T05:22:00Z,4,user_9725,https://example.com/reviews/swiggy/R0022
+R0014,Zomato,Delhi,Great offers and an easy app.,2021-05-10T00:09:00Z,4,user_9758,https://example.com/reviews/zomato/R0014
+R0052,Infosys,Hyderabad campus,Good learning programs and supportive managers.,2024-09-11T07:02:00Z,5,user_4569,https://example.com/reviews/infosys/R0052
+R0051,Infosys,Pune campus,Good learning programs and supportive managers.,2022-12-10T01:29:00Z,5,user_3581,https://example.com/reviews/infosys/R0051
+R0038,Tata Motors,Pune showroom,Waited three weeks for a spare part.,2021-05-05T14:14:00Z,2,user_7525,https://example.com/reviews/tata-motors/R0038
+R0023,Swiggy,Hyderabad,Delivery partner could not find my address.,2022-04-27T12:47:00Z,1,user_4275,https://example.com/reviews/swiggy/R0023
+R0018,Swiggy,Hyderabad,Delivery partner could not find my address.,2022-10-01T02:55:00Z,2,user_7164,https://example.com/reviews/swiggy/R0018
+R0048,Infosys,Mysuru campus,Project work is steady and well planned.,2024-04-15T03:42:00Z,4,user_9110,https://example.com/reviews/infosys/R0048
+R0050,Infosys,Hyderabad campus,Joined Infosys last month as a trainee.,2026-02-21T23:56:00Z,3,user_8057,https://example.com/reviews/infosys/R0050
+R0012,Zomato,Delhi,Wrong item delivered and support was slow.,2025-08-03T05:28:00Z,2,user_5552,https://example.com/reviews/zomato/R0012
+R0011,Zomato,Bengaluru,Delivery fee keeps going up.,2024-03-20T03:31:00Z,2,user_4575,https://example.com/reviews/zomato/R0011
+R0043,Infosys,Mysuru campus,Infosys announced new quarterly results today.,2019-05-02T22:11:00Z,3,user_2186,https://example.com/reviews/infosys/R0043
+R0047,Infosys,Bengaluru campus,Hybrid policy changed without much notice.,2023-06-26T00:16:00Z,2,user_1251,https://example.com/reviews/infosys/R0047
+R0019,Swiggy,Chennai,Rider was polite and on time.,2023-08-04T03:54:00Z,5,user_8634,https://example.com/reviews/swiggy/R0019
+R0010,Zomato,Delhi,"Ordering through Zomato is fine, nothing special. You can email me at priya.sharma@example.com.",2019-12-23T09:41:00Z,3,user_5662,https://example.com/reviews/zomato/R0010
+R0020,Swiggy,Pune,Restaurant list shows items that are out of stock.,2024-02-24T10:47:00Z,1,user_8841,https://example.com/reviews/swiggy/R0020
+R0040,Tata Motors,Pune showroom,Punch EV range is better than I expected.,2024-09-15T14:45:00Z,5,user_7297,https://example.com/reviews/tata-motors/R0040
+R0013,Zomato,Bengaluru,"Ordering through Zomato is fine, nothing special.",2024-11-13T07:09:00Z,3,user_3887,https://example.com/reviews/zomato/R0013
+R0045,Infosys,Pune campus,Long hours during release weeks.,2021-10-05T01:33:00Z,2,user_2793,https://example.com/reviews/infosys/R0045
+R0015,Swiggy,Bengaluru,Swiggy One saves me money every week.,2019-12-28T16:39:00Z,5,user_8481,https://example.com/reviews/swiggy/R0015
+R0021,Swiggy,Bengaluru,Tried Swiggy for the first time. My number is 044-2345-6789.,2025-09-12T04:44:00Z,3,user_9652,https://example.com/reviews/swiggy/R0021
+R0027,Swiggy,Bengaluru,Refund took more than a week.,2020-12-13T14:25:00Z,2,user_3602,https://example.com/reviews/swiggy/R0027
+R0054,Infosys,Mysuru campus,Appraisal communication could be clearer.,2020-03-13T18:02:00Z,2,user_1368,https://example.com/reviews/infosys/R0054
+R0053,Infosys,Pune campus,Good learning programs and supportive managers.,2020-08-09T16:41:00Z,5,user_5066,https://example.com/reviews/infosys/R0053
+R0055,Infosys,Hyderabad campus,Project work is steady and well planned.,2021-11-23T19:24:00Z,4,user_9096,https://example.com/reviews/infosys/R0055
+R0008,Zomato,Delhi,Order arrived cold and 50 minutes late.,2026-03-25T10:09:00Z,2,user_7909,https://example.com/reviews/zomato/R0008
+R0999,Zomato,Bengaluru,"Ordering through Zomato is fine, nothing special.",2024-11-13T07:09:00Z,3,user_3887,https://example.com/reviews/zomato/R0013
+R0028,Swiggy,Chennai,Instamart delivered groceries in ten minutes.,2026-10-05T19:52:00Z,4,user_6741,https://example.com/reviews/swiggy/R0028
+R1000,Zomato,,Zomato Gold membership extended for a year.,2018-06-14T09:30:00Z,,user_1234,https://example.com/reviews/zomato/R1000
+R0026,Swiggy,Chennai,Delivery partner could not find my address.,2024-11-03T21:07:00Z,2,user_4265,https://example.com/reviews/swiggy/R0026
+R0042,Tata Motors,Chennai showroom,Test drove the Curvv yesterday.,2025-11-27T08:25:00Z,3,user_9791,https://example.com/reviews/tata-motors/R0042
+R0031,Tata Motors,Delhi service centre,Punch EV range is better than I expected.,2021-09-14T04:03:00Z,5,user_8506,https://example.com/reviews/tata-motors/R0031
+R0039,Tata Motors,Chennai showroom,Test drove the Curvv yesterday.,2025-09-13T10:26:00Z,3,user_6842,https://example.com/reviews/tata-motors/R0039
+R0034,Tata Motors,Delhi service centre,Punch EV range is better than I expected.,2024-09-02T07:12:00Z,5,user_1691,https://example.com/reviews/tata-motors/R0034
+R1002,Zomato,Bengaluru,Visited the Zomato Kitchens pop-up near Apple Park cafe.,2023-03-02T12:00:00Z,3,user_9012,https://example.com/reviews/zomato/R1002
+R0046,Infosys,Pune campus,Infosys announced new quarterly results today.,2022-04-10T20:19:00Z,3,user_5750,https://example.com/reviews/infosys/R0046
+R0033,Tata Motors,Pune showroom,Showroom staff did not follow up on my booking.,2023-03-05T15:39:00Z,1,user_2011,https://example.com/reviews/tata-motors/R0033
+R0005,Zomato,Bengaluru,Great offers and an easy app.,2023-09-23T02:36:00Z,5,user_4374,https://example.com/reviews/zomato/R0005
+R0030,Tata Motors,Delhi service centre,Waited three weeks for a spare part.,2020-04-01T08:13:00Z,1,user_9211,https://example.com/reviews/tata-motors/R0030
+R0001,Zomato,Mumbai,Great offers and an easy app.,2019-02-27T17:06:00Z,5,user_1950,https://example.com/reviews/zomato/R0001
+R0017,Swiggy,Bengaluru,Instamart delivered groceries in ten minutes.,2021-02-11T19:03:00Z,5,user_1003,https://example.com/reviews/swiggy/R0017
+R0032,Tata Motors,Pune showroom,  Showroom staff did not follow up on my booking.   ,2022-09-05T16:32:00Z,1,user_8211,https://example.com/reviews/tata-motors/R0032
+R0016,Swiggy,Chennai,Swiggy and Zomato prices look similar today.,2020-07-04T15:40:00Z,3,user_2019,https://example.com/reviews/swiggy/R0016
+R0044,Infosys,Hyderabad campus,Good learning programs and supportive managers.,2020-02-20T07:04:00Z,4,user_2993,https://example.com/reviews/infosys/R0044
+R0035,Tata Motors,Chennai showroom,Showroom staff did not follow up on my booking.,2025-02-15T10:39:00Z,1,user_5541,https://example.com/reviews/tata-motors/R0035
+R0049,Infosys,Pune campus,Long hours during release weeks.,2025-04-11T06:53:00Z,1,user_7630,https://example.com/reviews/infosys/R0049
+R1001,Zomato,Chennai,<p>Great &amp; fast delivery!</p>,2026-10-30T18:05:00Z,5,user_5678,https://example.com/reviews/zomato/R1001
+R0056,Infosys,Bengaluru campus,Project work is steady and well planned.,2025-12-23T16:08:00Z,4,user_4767,https://example.com/reviews/infosys/R0056
+R0004,Zomato,Mumbai,Wrong item delivered and support was slow.,2022-03-18T03:36:00Z,2,user_3961,https://example.com/reviews/zomato/R0004
+R0036,Tata Motors,Chennai showroom,Showroom staff did not follow up on my booking.,2026-10-17T08:59:00Z,1,user_8332,https://example.com/reviews/tata-motors/R0036
+R0029,Tata Motors,Pune showroom,Punch EV range is better than I expected.,2019-01-26T23:41:00Z,4,user_9627,https://example.com/reviews/tata-motors/R0029
+R0025,Swiggy,Pune,Swiggy and Zomato prices look similar today.,2022-02-08T15:12:00Z,3,user_4348,https://example.com/reviews/swiggy/R0025
+R0007,Zomato,Delhi,Wrong item delivered and support was slow.,2025-09-16T10:46:00Z,2,user_5717,https://example.com/reviews/zomato/R0007
+R0024,Swiggy,Pune,Restaurant list shows items that are out of stock.,2023-08-09T06:44:00Z,1,user_8327,https://example.com/reviews/swiggy/R0024
+R0041,Tata Motors,Delhi service centre,Punch EV range is better than I expected.,2020-04-04T02:16:00Z,5,user_1648,https://example.com/reviews/tata-motors/R0041
+R0009,Zomato,Delhi,Delivery was quick and the food arrived hot.,2024-10-16T18:51:00Z,5,user_2126,https://example.com/reviews/zomato/R0009
+R0003,Zomato,Chennai,Delivery was quick and the food arrived hot. Call me on +91 98765 43210 if you need details.,2021-10-19T12:03:00Z,4,user_1763,https://example.com/reviews/zomato/R0003
+R0002,Zomato,Bengaluru,Used Zomato for lunch today.,2020-07-14T02:15:00Z,3,user_7955,https://example.com/reviews/zomato/R0002
+,Zomato,Chennai,App crashed at checkout twice.,2024-10-15T11:19:00Z,2,user_3945,

@@ -1,0 +1,68 @@
+# Scraping sites configuration
+# Each entry defines a site that can be scraped.
+# Fields:
+#   key: short identifier used in CLI and requests
+#   name: human readable name
+#   allows_scraping: set to true only if policy permits scraping (default false)
+#   policy_evidence:
+#     robots_url: URL of the robots.txt file (optional)
+#     terms_url: URL of the terms of service (optional)
+#     checked_on: date when the policy was last checked (YYYY-MM-DD)
+#     note: free‑form note about policy considerations
+#   platform: platform enum value (e.g., other, reddit, ...)
+#   content_type: default content type hint for items (e.g., post, comment)
+#   start_urls: list of URLs to begin crawling
+#   allowed_path_prefixes: list of URL path prefixes that are allowed to be fetched
+#   max_pages: maximum number of pages to fetch for this site per run
+#   min_delay_seconds: minimum polite delay between requests (seconds)
+#   parser: name of the parser class to use (must be registered in parsers/__init__.py)
+#   license_note: any licensing note for the content
+#   attribution: attribution text for the source
+#
+# Example entry (hackernews):
+#   key: hackernews
+#   name: Hacker News
+#   allows_scraping: true
+#   policy_evidence:
+#     robots_url: https://news.ycombinator.com/robots.txt
+#     terms_url: ""
+#     checked_on: 2026-11-13
+#     note: "robots.txt asks for a 30 second crawl delay; user content, check HN terms before redistribution"
+#   platform: news_blog
+#   content_type: post
+#   start_urls:
+#     - https://news.ycombinator.com/news
+#   allowed_path_prefixes:
+#     - /news
+#     - /newest
+#     - /item
+#   max_pages: 5
+#   min_delay_seconds: 5
+#   parser: hackernews
+#   license_note: ""
+#   attribution: ""
+
+# Real entry
+hackernews:
+  key: hackernews
+  name: Hacker News
+  allows_scraping: true
+  policy_evidence:
+    robots_url: https://news.ycombinator.com/robots.txt
+    terms_url: ""
+    checked_on: 2026-11-13
+    note: "robots.txt asks for a 30 second crawl delay; user content, check HN terms before redistribution"
+  platform: news_blog
+  content_type: post
+  start_urls:
+    - https://news.ycombinator.com/news
+  allowed_path_prefixes:
+    - /news
+    - /newest
+    - /item
+  max_pages: 5
+  min_delay_seconds: 5
+  parser: hackernews
+  license_note: ""
+  attribution: ""
+

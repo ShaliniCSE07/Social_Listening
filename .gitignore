@@ -1,6 +1,26 @@
 .env
 .venv/
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+data/raw/*
+!data/raw/.gitkeep
+
 sample_*.jsonl
 industry.json
+data/processed/*
+!data/processed/.gitkeep
+data/checkpoints/*
+!data/checkpoints/.gitkeep
+data/output/*
+!data/output/.gitkeep
+data/cache/
+data/datasets/_downloads/
+data/runs/
+
+>>>>>>> 1f257a10c35be61cb9425dd658e6da1be39b8e51
