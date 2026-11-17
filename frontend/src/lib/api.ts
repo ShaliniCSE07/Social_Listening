@@ -374,3 +374,47 @@ export function getDownloadUrl(runId: string, file: "mentions.jsonl" | "attempts
   const baseUrl = getApiBaseUrl().replace(/\/$/, "");
   return `${baseUrl}/api/runs/${encodeURIComponent(runId)}/download?file=${file}`;
 }
+
+// ── Collection → processing gateway ──
+
+export interface ProcessingAvailability {
+  available: boolean;
+  reason?: string | null;
+}
+
+export type ProcessingStatus = "not_started" | "queued" | "running" | "completed" | "failed";
+
+export interface RunProcessingState {
+  run_id: string;
+  collection_status?: string;
+  can_process?: boolean;
+  status: ProcessingStatus | string;
+  queued_at?: string;
+  started_at?: string;
+  finished_at?: string;
+  error?: string | null;
+  mentions_in?: number;
+  attempts_in?: number;
+  record_count?: number;
+  counters?: Record<string, number>;
+  total_cost_usd?: number;
+}
+
+/** URL of the data processing dashboard (Member 2, Streamlit). */
+export function getProcessingDashboardUrl(): string {
+  return process.env.NEXT_PUBLIC_PROCESSING_DASHBOARD_URL || "http://localhost:8501";
+}
+
+export async function getProcessingAvailability(): Promise<ProcessingAvailability> {
+  return apiFetch<ProcessingAvailability>("/api/processing/status");
+}
+
+export async function getRunProcessing(runId: string): Promise<RunProcessingState> {
+  return apiFetch<RunProcessingState>(`/api/runs/${encodeURIComponent(runId)}/processing`);
+}
+
+export async function startRunProcessing(runId: string): Promise<RunProcessingState> {
+  return apiFetch<RunProcessingState>(`/api/runs/${encodeURIComponent(runId)}/process`, {
+    method: "POST",
+  });
+}

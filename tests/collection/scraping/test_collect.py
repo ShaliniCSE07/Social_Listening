@@ -318,7 +318,9 @@ class TestMaxPages:
         monkeypatch.setattr(ScrapingConnector, "_fetch", staticmethod(tracking_fetch))
 
         ScrapingConnector().collect(_request())
-        assert len(fetch_urls) <= 1
+        # robots.txt is read once per host and is not a page
+        page_urls = [u for u in fetch_urls if not u.endswith("/robots.txt")]
+        assert len(page_urls) <= 1
 
 
 # ====================================================================

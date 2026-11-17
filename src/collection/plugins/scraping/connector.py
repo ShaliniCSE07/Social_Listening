@@ -12,8 +12,9 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import ClassVar, Dict, List, Tuple, Union
-from urllib.parse import urljoin
+from typing import ClassVar, Dict, List, Optional, Tuple, Union
+from urllib.parse import urljoin, urlsplit
+from urllib.robotparser import RobotFileParser
 
 import requests as http_client
 import yaml
@@ -26,6 +27,9 @@ from src.contracts.enums import AttemptStatus, ContentType, Method, Platform
 from src.contracts.schemas import CollectionAttempt, RawMention
 
 log = logging.getLogger(__name__)
+
+# Token matched against "User-agent:" lines in robots.txt.
+ROBOTS_USER_AGENT = "social-listening-bot"
 
 # ---------------------------------------------------------------------------
 # Config loader (cached per-process)
@@ -147,7 +151,8 @@ class ScrapingConnector(BaseConnector):
     ) -> Tuple[List[RawMention], int, float]:
         start_urls: List[str] = site_cfg.get("start_urls", [])
         max_pages: int = site_cfg.get("max_pages", 5)
-        delay: float = float(site_cfg.get("min_delay_seconds", 0))
+        site_delay: float = float(site_cfg.get("min_delay_seconds", 0))
+        robots_by_host: Dict[str, Optional[RobotFileParser]] = {}
         parser = get_parser(site_cfg["parser"])
         site_name = site_cfg.get("name", site_key)
         platform_str = site_cfg.get("platform", "other")
@@ -165,6 +170,16 @@ class ScrapingConnector(BaseConnector):
             if url in visited:
                 continue
             visited.add(url)
+
+            # robots.txt: skip disallowed paths and honour its Crawl-delay
+            host = urlsplit(url).netloc
+            if host not in robots_by_host:
+                robots_by_host[host] = self._load_robots(url)
+            robots = robots_by_host[host]
+            if robots is not None and not robots.can_fetch(ROBOTS_USER_AGENT, url):
+                log.info("robots.txt disallows %s; skipping", url)
+                continue
+            delay = self._effective_delay(site_delay, robots)
 
             # polite delay (skip on the very first fetch)
             if pages_fetched > 0 and delay > 0:
@@ -242,6 +257,46 @@ class ScrapingConnector(BaseConnector):
                 ))
 
         return mentions, pages_fetched, total_delay
+
+    # ------------------------------------------------------------------ #
+    # private: robots.txt
+    # ------------------------------------------------------------------ #
+    def _load_robots(self, url: str) -> Optional[RobotFileParser]:
+        """Fetch and parse the site's robots.txt.
+
+        Returns ``None`` when it cannot be read (network error, 404); the
+        site's own ``min_delay_seconds`` still applies then. A 401/403 on
+        robots.txt is treated as "disallow everything", as Python's
+        ``RobotFileParser.read()`` does.
+        """
+        parts = urlsplit(url)
+        robots_url = f"{parts.scheme}://{parts.netloc}/robots.txt"
+        rp = RobotFileParser(robots_url)
+        try:
+            text = self._fetch(robots_url)
+        except http_client.HTTPError as exc:
+            code = getattr(exc.response, "status_code", None)
+            if code in (401, 403):
+                rp.disallow_all = True
+                return rp
+            log.warning("robots.txt not readable at %s (%s)", robots_url, exc)
+            return None
+        except Exception as exc:
+            log.warning("robots.txt not readable at %s (%s)", robots_url, exc)
+            return None
+        rp.parse(text.splitlines())
+        return rp
+
+    @staticmethod
+    def _effective_delay(site_delay: float, robots: Optional[RobotFileParser]) -> float:
+        """The larger of the site's ``min_delay_seconds`` and robots.txt ``Crawl-delay``."""
+        robots_delay = 0.0
+        if robots is not None:
+            try:
+                robots_delay = float(robots.crawl_delay(ROBOTS_USER_AGENT) or 0)
+            except (TypeError, ValueError):
+                robots_delay = 0.0
+        return max(site_delay, robots_delay)
 
     # ------------------------------------------------------------------ #
     # private: HTTP fetch (thin wrapper, easy to mock)

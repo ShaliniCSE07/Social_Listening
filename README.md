@@ -100,6 +100,7 @@ python -m src.collection.executor --input targets.json --out data/output
   2. `other_methods_failed`: Every earlier method was attempted and ended `failed`, `rate_limited`, or `empty` (or if no earlier method was eligible, recorded as `true` with detail `"no other method available"`).
   3. `below_min_threshold`: Collected items so far < `scraping.min_results_threshold` (default 5).
   All three boolean checks are recorded in `attempt.scraping_checks`. Any `false` check skips execution without fetching.
+- **Polite Crawling**: Each site's `robots.txt` is read once per run. Disallowed paths are skipped, and the wait between pages is the larger of the site's `min_delay_seconds` and the `robots.txt` `Crawl-delay` (Hacker News: 30 seconds, so a 5-page scrape takes about 2 minutes). If `robots.txt` returns 401/403, nothing is fetched.
 - **Fallback Provenance**: When scraping succeeds, its `RawMention` records carry `fallback_from` indicating the prior method that failed or fell short.
 - **Service Plan Transparency**: `POST /api/plan` respects `scraping_allowed` and surfaces scraping candidates as `conditional: true` with the three conditions and known plan-time status.
 
@@ -162,3 +163,46 @@ npm test
 3. Open `http://localhost:3000` in your browser. Use browser devtools (e.g., Device Toolbar or standard viewport capture) to take desktop and mobile screenshots across `/`, `/runs/new`, `/runs`, `/runs/[id]`, and `/sources`.
 
 
+
+## Collection → Processing Workflow
+
+Collection (Member 1) and processing (Member 2) run in **one backend**. A collection run happens first; when it has finished, its output is handed to processing through a gateway.
+
+```
+Next.js dashboard (:3000)                 Processing dashboard (Streamlit, :8501)
+  /runs/[id]  ── "Send to processing" ──┐        │  (Mentions/Attempts upload, records, checkpoints)
+              ── "Open processing dashboard" ───►│
+                                        ▼        ▼
+                      FastAPI backend :8000  (uvicorn src.service.main:app)
+          /api/runs/...  collection         /process, /runs/{id}/records, /api/v1/...  processing
+                │ writes data/runs/<id>/mentions.jsonl + attempts.jsonl
+                └──► POST /api/runs/<id>/process ──► main.process_handoff ──► MongoDB
+```
+
+**Gateway endpoints** (`src/service/routes/processing.py`, logic in `src/service/processing_gateway.py`):
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/processing/status` | Whether processing can run here (`available`, `reason`) |
+| `GET /api/runs/{id}/processing` | Processing state of a run: `not_started`, `queued`, `running`, `completed`, `failed` |
+| `POST /api/runs/{id}/process` | Sends a `completed` or `partial` run to processing (202). 409 if the run is unfinished, empty or already processed; 503 if processing is unavailable |
+
+- The collection run ID is reused as the processing run ID, so the same ID appears in both dashboards.
+- Processing state is saved in `data/runs/<id>/processing.json`; `run_summary.json` is not changed.
+- Collection-only attempt fields (`pages_fetched`, `pages_from_cache`, `delay_used`) are dropped before handoff, because the processing `CollectionAttempt` model does not declare them.
+- Industry per company comes from `config/companies.yaml`.
+- If processing cannot load (MongoDB down, Presidio not installed, `SOCL_AUTHOR_PEPPER` unset), collection still works and the run page explains why processing is unavailable.
+
+**Running everything together**
+
+```bash
+# 1. MongoDB on localhost:27017, and in .env: SOCL_AUTHOR_PEPPER=<any secret>
+# 2. One backend for both collection and processing
+uvicorn src.service.main:app --reload --port 8000
+# 3. Collection dashboard
+cd frontend && npm run dev
+# 4. Processing dashboard
+streamlit run app_ui.py
+```
+
+Then start a run in `/runs/new`, open it, and when collection finishes click **Send to processing**, then **Open processing dashboard**. The processing dashboard URL can be changed with `NEXT_PUBLIC_PROCESSING_DASHBOARD_URL` in `frontend/.env.local` (default `http://localhost:8501`).

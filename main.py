@@ -51,7 +51,6 @@ async def process_run(
     mentions = [RawMention(**m) for m in mentions_raw]
     attempts = [CollectionAttempt(**a) for a in attempts_raw]
 
-    run_id = f"run_{uuid.uuid4().hex[:12]}"
     try:
         industry_map = json.loads(industry_json) if industry_json else {}
         if not isinstance(industry_map, dict):
@@ -61,6 +60,29 @@ async def process_run(
             status_code=422,
             detail={"code": "SOCL-VAL-001", "message": f"Invalid industry_json: {exc}"},
         )
+
+    return process_handoff(mentions, attempts, industry_map)
+
+
+def process_handoff(
+    mentions: list[RawMention],
+    attempts: list[CollectionAttempt],
+    industry_map: dict[str, str | None],
+    run_id: str | None = None,
+    run_extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the processing pipeline on already-validated handoff data.
+
+    Shared by the upload endpoint above (``POST /process``) and the
+    collection -> processing gateway (``src/service/processing_gateway.py``),
+    so both paths process data in exactly the same way.
+
+    ``run_id``: reuse a run ID (the gateway passes the collection run ID);
+    a new one is generated when omitted, as before.
+    ``run_extra``: extra fields stored on the run receipt in ``db.runs``.
+    """
+    if run_id is None:
+        run_id = f"run_{uuid.uuid4().hex[:12]}"
 
     # Determine load_type per company: no checkpoint -> full, else delta
     db = get_db()
@@ -116,7 +138,8 @@ async def process_run(
         "created_at": datetime.now(timezone.utc),
         "status": "completed",
         "counters": result["counters"],
-        "report": result["report"]
+        "report": result["report"],
+        **(run_extra or {}),
     })
     # ---------------------------------------
 
