@@ -30,43 +30,164 @@ def _fingerprint(text: str, posted: datetime | None) -> str:
     return hashlib.sha256(norm.encode()).hexdigest()
 
 
-def _map_from_payload(raw: RawMention) -> dict:
-    """Map platform-specific fields to standard fields; return None-filled when missing"""
-    p = raw.raw_payload
-    platform = raw.platform.value
+# ---- Payload field names per source ----------------------------------------
+# Checked in order; the first non-empty value wins. The original keys come
+# first so existing payloads map exactly as before.
+_TEXT_KEYS = (
+    "body", "selftext", "text", "content",          # reddit / generic
+    "review_text", "review_description", "review",  # datasets
+    "comment", "title",                              # titles: link posts, HN stories
+)
+_AUTHOR_KEYS = ("author", "user", "username", "userName", "authorAttribution")
+_DATE_KEYS = (
+    "updated", "created", "created_utc", "published",
+    "publishTime",                                   # Google Places
+    "review_date", "date", "at",                     # datasets
+)
+_LIKE_KEYS = ("score", "likes", "ups", "points")
+_COMMENT_KEYS = ("num_comments", "comments_count", "comment_count")
+_SHARE_KEYS = ("shares", "share_count")
+_VIEW_KEYS = ("views", "view_count")
 
-    # Extract common fields by platform (extend as needed)
-    text = p.get("body") or p.get("selftext") or p.get("text") or p.get("content") or ""
-    author_handle = p.get("author") or p.get("user") or p.get("username")
-    posted_raw = p.get("updated") or p.get("created") or p.get("created_utc") or p.get("published")
-    posted_at = None
-    if posted_raw:
+# Datasets whose rows were tied to the company by the dataset itself, not by
+# the text (see Member 1's dataset connector, raw_payload.dataset_match_basis).
+_SOURCE_MATCH_BASES = {"company_column", "default_company"}
+
+_catalogue_cache: dict | None = None
+_aliases_cache: dict | None = None
+
+
+def _dataset_columns(payload: dict) -> dict:
+    """Column map for a dataset row, from config/plugins/dataset_catalogue.yaml."""
+    global _catalogue_cache
+    key = payload.get("dataset_key")
+    if not key:
+        return {}
+    if _catalogue_cache is None:
         try:
-            posted_at = datetime.fromisoformat(posted_raw.replace("Z", "+00:00"))
+            from config.settings import load_plugin_config
+            _catalogue_cache = load_plugin_config("dataset_catalogue").get("datasets", {}) or {}
         except Exception:
-            posted_at = None
+            _catalogue_cache = {}
+    entry = _catalogue_cache.get(key) or {}
+    return entry.get("columns") or {}
 
-    likes = p.get("score") or p.get("likes") or p.get("ups")
-    comments = p.get("num_comments") or p.get("comments_count")
-    shares = p.get("shares") or p.get("share_count")
-    views = p.get("views") or p.get("view_count")
+
+def _company_aliases(company: str) -> tuple[list[str], list[str]]:
+    """(names incl. alt spellings, handles) for a company, from config/companies.yaml."""
+    global _aliases_cache
+    if _aliases_cache is None:
+        try:
+            from config.settings import load_companies
+            _aliases_cache = {k.lower(): (v or {}) for k, v in load_companies().items()}
+        except Exception:
+            _aliases_cache = {}
+    cfg = _aliases_cache.get(company.lower(), {})
+    names = [company] + [a for a in (cfg.get("alt_spellings") or []) if a]
+    handles = [h for h in (cfg.get("handles") or []) if h]
+    return names, handles
+
+
+def _blank(v) -> bool:
+    return v is None or (isinstance(v, str) and not v.strip())
+
+
+def _as_text(v) -> str | None:
+    """Strings as-is; Google-style {"text": "..."} / {"displayName": "..."} unwrapped."""
+    if isinstance(v, dict):
+        v = v.get("text") or v.get("displayName")
+    if _blank(v):
+        return None
+    return v if isinstance(v, str) else str(v)
+
+
+def _first(p: dict, keys, column: str | None = None):
+    if column and not _blank(p.get(column)):
+        return p.get(column)
+    for k in keys:
+        if not _blank(p.get(k)):
+            return p.get(k)
+    return None
+
+
+def _to_float(v) -> float | None:
+    if _blank(v) or isinstance(v, bool):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(v) -> int | None:
+    f = _to_float(v)
+    return int(f) if f is not None else None
+
+
+def _to_utc(v) -> datetime | None:
+    """ISO strings, 'YYYY-MM-DD HH:MM:SS', epoch seconds; naive values are UTC."""
+    if _blank(v):
+        return None
+    try:
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return datetime.fromtimestamp(float(v), tz=timezone.utc)
+        if isinstance(v, datetime):
+            dt = v
+        else:
+            dt = datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _map_from_payload(raw: RawMention) -> dict:
+    """Map platform-specific fields to standard fields; return None-filled when missing.
+
+    Values are read as received: empty strings count as missing, and numbers
+    that arrive as strings ("5") are converted; unreadable values become None.
+    """
+    p = raw.raw_payload
+    cols = _dataset_columns(p)
+
+    text = _as_text(_first(p, _TEXT_KEYS, cols.get("text"))) or ""
+    author_handle = _as_text(_first(p, _AUTHOR_KEYS, cols.get("author")))
+    posted_at = _to_utc(_first(p, _DATE_KEYS, cols.get("date")))
 
     return {
-        "text": text.strip() if text else "",
+        "text": text.strip(),
         "author_handle": author_handle,
         "posted_at": posted_at,
-        "url": raw.url or p.get("url"),
-        "branch": raw.branch or p.get("branch") or p.get("place"),
+        "url": raw.url or _as_text(p.get(cols.get("url") or "url")),
+        "branch": raw.branch or _as_text(_first(p, ("branch", "place"), cols.get("branch"))),
         "reactions": {
-            "likes": int(likes) if likes is not None else None,
-            "comments": int(comments) if comments is not None else None,
-            "shares": int(shares) if shares is not None else None,
-            "views": int(views) if views is not None else None,
+            "likes": _to_int(_first(p, _LIKE_KEYS)),
+            "comments": _to_int(_first(p, _COMMENT_KEYS)),
+            "shares": _to_int(_first(p, _SHARE_KEYS)),
+            "views": _to_int(_first(p, _VIEW_KEYS)),
         },
-        "rating": float(p["rating"]) if p.get("rating") is not None else None,
-        "language": p.get("language") or p.get("lang"),
-        "place": p.get("place"),
+        "rating": _to_float(_first(p, ("rating",), cols.get("rating"))),
+        "language": _as_text(p.get("language") or p.get("lang")),
+        "place": _as_text(p.get("place") or p.get("place_name")),
     }
+
+
+def _company_match(company: str, text: str, payload: dict) -> tuple[str | None, str]:
+    """Return (mention_type, company_match), or (None, "") when the text is not about the company.
+
+    Text matches use the company name, its alt spellings and its handles from
+    config/companies.yaml. Dataset rows that the dataset itself tied to the
+    company (company column or default_company) are kept even when the text
+    does not name it, e.g. app-store reviews ("Great app, fast delivery").
+    """
+    low = text.lower()
+    names, handles = _company_aliases(company)
+    if any(h.lower() in low for h in handles):
+        return "tags the account", "confirmed"
+    if any(n.lower() in low for n in names):
+        return "names company directly", "confirmed"
+    if payload.get("dataset_match_basis") in _SOURCE_MATCH_BASES:
+        return "identified by source", "source"
+    return None, ""
 
 
 def process_mentions(
@@ -119,9 +240,9 @@ def process_mentions(
                 continue
             seen.add(dedup_key)
 
-            # ---- FR-PRC-06: company matching (simplified: if company name/alias in text, keep) ----
-            name_hit = company.lower() in text.lower()
-            if not name_hit:
+            # ---- FR-PRC-06: company matching (name, alt spellings, handles, or dataset tag) ----
+            mention_type, company_match = _company_match(company, text, raw.raw_payload)
+            if mention_type is None:
                 # Here can further match with handles/aliases; example simplified: if no match,
                 # count as wrong company and drop (production should use two thresholds)
                 counters["wrong_company"] += 1
@@ -138,7 +259,6 @@ def process_mentions(
 
             # ---- FR-PRC-09: labelling ----
             content_type = raw.content_type_hint.value if raw.content_type_hint else "post"
-            mention_type = "names company directly" if name_hit else "uncertain"
 
             # ---- FR-PRC-10: completeness ----
             incomplete = []
@@ -150,7 +270,9 @@ def process_mentions(
                 counters["incomplete"] += 1
 
             # ---- Build record ----
-            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, "", mapped["posted_at"])
+            # Rows without a platform ID are identified by text + date; passing "" here
+            # gave every same-day dataset review the same ID, so they overwrote each other.
+            mid = _mention_id(raw.platform.value, raw.item_id, raw.raw_payload, text, mapped["posted_at"])
             record_id = f"{mid}:{company_id}"
 
             # Check existing record in DB for version history (FR-DLT-08)
@@ -196,11 +318,11 @@ def process_mentions(
                 run_id=run_id,
                 load_type=(windows or {}).get((company, raw.platform.value), {}).get("load_type", load_type),
                 is_update=is_update,
-                fingerprint=_fingerprint(raw.raw_payload.get("body", "") + raw.raw_payload.get("updated", ""), mapped.get("posted_at")),
+                fingerprint=_fingerprint(str(raw.raw_payload.get("body") or "") + str(raw.raw_payload.get("updated") or ""), mapped.get("posted_at")),
                 version=version,
                 supersedes=supersedes,
                 incomplete=incomplete,
-                company_match="confirmed",
+                company_match=company_match,
             )
             all_records.append(rec)
 
