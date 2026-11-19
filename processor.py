@@ -1,4 +1,5 @@
 from __future__ import annotations
+from masker import mask_text
 
 import hashlib
 from collections import defaultdict
@@ -248,8 +249,11 @@ def process_mentions(
                 counters["wrong_company"] += 1
                 continue
 
+            # Extract country from raw payload (Member 1 should send this, we default to None)
+            user_country = raw.raw_payload.get("user_country") or raw.raw_payload.get("country")
+            
             # ---- FR-PRC-08: masking ----
-            masked_text, mask_ok = mask_text(text)
+            masked_text, mask_ok = mask_text(text, country_code=user_country)
             if not mask_ok:
                 counters["quarantined"] += 1
                 continue

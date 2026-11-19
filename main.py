@@ -187,11 +187,10 @@ def get_masking_config():
 
 @app.post("/api/v1/settings/masking")
 def update_masking_config(config: dict = Body(...)):
-    """Updates the masking configuration."""
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
     
-    # Force masker.py to reload the config
+    # Reload the config in memory
     import masker
     masker.MASK_CONFIG = masker.load_config()
     

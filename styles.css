@@ -110,3 +110,10 @@ header {visibility: hidden;}
     background-color: white;
     border: 1px solid #E2E8F0;
 }
+/* --- MAKE DROPDOWNS SHOW HAND CURSOR --- */
+div[data-baseweb="select"] > div {
+    cursor: pointer !important;
+}
+select {
+    cursor: pointer !important;
+}

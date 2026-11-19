@@ -34,7 +34,6 @@ latest_cost = latest_run.get("report", {}).get("total_cost_usd", 0.0) if latest_
 latest_dupes = latest_run.get("counters", {}).get("duplicates", 0) if latest_run else 0
 latest_collected = latest_run.get("counters", {}).get("collected", 0) if latest_run else 0
 
-
 # --- CUSTOM HEADER ---
 st.markdown("""
 <div class="header-container">
@@ -83,13 +82,13 @@ if latest_run and str(latest_run.get("status", "")).lower() in ["failed", "parti
                     st.error("Failed to trigger rerun.")
 # --------------------------------------
 
+# --- TABS ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Process Data", "📄 Records Explorer", "📊 Run Metrics & Rerun", "⏱️ Checkpoints", "⚙️ Settings"])
 
 # --- TAB 1: Process Data ---
 with tab1:
     st.markdown("<h3 style='color: #1E293B;'>Upload Handoff Files</h3>", unsafe_allow_html=True)
     
-    # Removed the custom form-container to get rid of the white box
     col1, col2 = st.columns(2)
     with col1:
         m_file = st.file_uploader("Mentions JSONL", type="jsonl")
@@ -127,10 +126,7 @@ with tab2:
     
     if records:
         df = pd.DataFrame(records)
-        # Fill missing industries with "Unknown" for a cleaner look
         df['industry'] = df['industry'].fillna("Unknown")
-        
-        # Display clean table
         st.data_editor(df, use_container_width=True, hide_index=True, disabled=True, height=400)
     else:
         st.info("No records found in database.")
@@ -200,6 +196,7 @@ with tab3:
                     res = requests.post(f"http://localhost:8000/api/v1/runs/{run_to_rerun}/rerun")
                     if res.status_code == 200:
                         st.success(res.json()["message"])
+                        st.rerun()
                     else:
                         st.error("Failed to trigger rerun.")
     else:
@@ -218,10 +215,9 @@ with tab4:
 
 # --- TAB 5: Settings (Masking Config) ---
 with tab5:
-    st.markdown("<h3 style='color: #1E293B;'>PII Masking Settings</h3>", unsafe_allow_html=True)
-    st.write("Configure how personal data is masked before it is saved to the database.")
+    st.markdown("<h3 style='color: #1E293B;'>PII Masking & Privacy Policies</h3>", unsafe_allow_html=True)
+    st.write("Configure masking rules. Unknown countries default to the Global Fallback (GDPR + DPDP strictest rules).")
     
-    # Fetch current config from API
     try:
         res = requests.get("http://localhost:8000/api/v1/settings/masking")
         if res.status_code == 200:
@@ -234,42 +230,63 @@ with tab5:
         config_data = {}
 
     if config_data:
-        with st.form("settings_form"):
-            st.subheader("Standard Replacements")
-            st.write("Change the placeholder text for detected entities.")
+        # Create two tabs inside settings: Default and Country Overrides
+        config_tab1, config_tab2 = st.tabs(["🌍 Global Default (GDPR + DPDP)", "🌐 Country Overrides"])
+        
+        with config_tab1:
+            st.subheader("Global Fallback Rules")
+            st.info("These rules apply if the user's country is unknown or not explicitly overridden.")
             
-            replacements = config_data.get("replacements", {})
-            new_replacements = {}
+            default_rules = config_data.get("default", {})
+            default_entities = default_rules.get("entities", {})
+            new_default_entities = {}
             
-            # Dynamically create input fields for each entity
-            for entity, current_val in replacements.items():
-                new_replacements[entity] = st.text_input(f"Mask for {entity}", value=current_val)
-            
-            st.divider()
-            st.subheader("Phone Number Masking")
-            
-            phone_conf = config_data.get("phone_masking", {})
-            preserve_cc = st.checkbox("Preserve Country Code (e.g., +91)", value=phone_conf.get("preserve_country_code", True))
-            mask_str = st.text_input("Phone Mask String", value=phone_conf.get("mask_string", "xxxxxxxxxx"))
-            fallback_mask = st.text_input("Fallback Mask (if no country code)", value=phone_conf.get("fallback_mask", "xxxxxxxxxx"))
-            
-            # Submit button
-            submitted = st.form_submit_button("💾 Save Configuration", use_container_width=True)
-            
-            if submitted:
-                # Build the new config dictionary
-                updated_config = {
-                    "replacements": new_replacements,
-                    "phone_masking": {
-                        "preserve_country_code": preserve_cc,
-                        "mask_string": mask_str,
-                        "fallback_mask": fallback_mask
-                    }
-                }
+            for entity, val in default_entities.items():
+                new_default_entities[entity] = st.text_input(f"Mask for {entity}", value=val, key=f"def_{entity}")
                 
-                # Send to API
-                save_res = requests.post("http://localhost:8000/api/v1/settings/masking", json=updated_config)
+            st.divider()
+            st.write("**Phone Number Masking**")
+            phone_conf = default_rules.get("phone_masking", {})
+            preserve_cc = st.checkbox("Preserve Country Code", value=phone_conf.get("preserve_country_code", True), key="def_cc")
+            mask_str = st.text_input("Phone Mask String", value=phone_conf.get("mask_string", "xxxxxxxxxx"), key="def_mask")
+            
+            if st.button("💾 Save Default Rules", use_container_width=True):
+                config_data["default"]["entities"] = new_default_entities
+                config_data["default"]["phone_masking"] = {
+                    "preserve_country_code": preserve_cc,
+                    "mask_string": mask_str
+                }
+                save_res = requests.post("http://localhost:8000/api/v1/settings/masking", json=config_data)
                 if save_res.status_code == 200:
-                    st.success("✅ Configuration saved successfully! The new rules will apply to the next run.")
-                else:
-                    st.error("Failed to save configuration.")
+                    st.success("✅ Default Rules Saved!")
+        
+        with config_tab2:
+            st.subheader("Country Specific Rules")
+            
+            overrides = config_data.get("country_overrides", {})
+            
+            if overrides:
+                # Create a dropdown to select which country to edit
+                selected_country = st.selectbox(
+                    "Select Country to Edit", 
+                    options=list(overrides.keys()),
+                    format_func=lambda x: f"{x} - {overrides[x].get('description', '')}"
+                )
+                
+                if selected_country:
+                    st.write(f"Editing rules for **{selected_country}**")
+                    country_rules = overrides[selected_country]
+                    country_entities = country_rules.get("entities", {})
+                    new_country_entities = {}
+                    
+                    # Loop through the entities for the selected country
+                    for entity, val in country_entities.items():
+                        new_country_entities[entity] = st.text_input(f"Mask for {entity}", value=val, key=f"{selected_country}_{entity}")
+                        
+                    if st.button(f"💾 Save {selected_country} Rules", use_container_width=True):
+                        config_data["country_overrides"][selected_country]["entities"] = new_country_entities
+                        save_res = requests.post("http://localhost:8000/api/v1/settings/masking", json=config_data)
+                        if save_res.status_code == 200:
+                            st.success(f"✅ {selected_country} Rules Saved!")
+            else:
+                st.info("No country overrides configured yet.")

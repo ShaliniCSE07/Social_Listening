@@ -1,14 +1,165 @@
 {
-    "replacements": {
+  "default": {
+    "description": "Global Fallback (Combined GDPR & India DPDP strictest rules)",
+    "entities": {
+      "EMAIL_ADDRESS": "[EMAIL]",
+      "PHONE_NUMBER": "[PHONE]",
+      "PERSON": "[NAME]",
+      "CREDIT_CARD": "[CARD]",
+      "IBAN_CODE": "[IBAN]",
+      "IP_ADDRESS": "[IP]",
+      "LOCATION": "[ADDRESS]",
+      "NRP": "[SENSITIVE_GROUP]",
+      "MEDICAL_LICENSE": "[MEDICAL]"
+    },
+    "phone_masking": {
+      "preserve_country_code": true,
+      "mask_string": "xxxxxxxxxx"
+    }
+  },
+  "country_overrides": {
+    "IN": {
+      "description": "India DPDP Act",
+      "entities": {
         "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
         "PERSON": "[NAME]",
         "CREDIT_CARD": "[CARD]",
         "IBAN_CODE": "[IBAN]",
-        "IP_ADDRESS": "[IP]"
-    },
-    "phone_masking": {
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
         "preserve_country_code": true,
-        "mask_string": "xxxxxxxxxx",
-        "fallback_mask": "xxxxxxxxxx"
+        "mask_string": "xxxxxxxxxx"
+      }
+    },
+    "US": {
+      "description": "US CCPA (Financial focus)",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxx-xxx-xxxx"
+      }
+    },
+    "GB": {
+      "description": "UK GDPR",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]",
+        "NRP": "[SENSITIVE_GROUP]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxxxxxxxx"
+      }
+    },
+    "CA": {
+      "description": "Canada PIPEDA",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxx-xxx-xxxx"
+      }
+    },
+    "AU": {
+      "description": "Australia Privacy Act",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxx-xxx-xxx"
+      }
+    },
+    "JP": {
+      "description": "Japan APPI",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxx-xxxx-xxxx"
+      }
+    },
+    "BR": {
+      "description": "Brazil LGPD",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]",
+        "NRP": "[SENSITIVE_GROUP]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxxxxxxxx"
+      }
+    },
+    "ZA": {
+      "description": "South Africa POPIA",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]",
+        "NRP": "[SENSITIVE_GROUP]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxxxxxxxx"
+      }
+    },
+    "AE": {
+      "description": "UAE PDPL",
+      "entities": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PHONE_NUMBER": "[PHONE]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "IP_ADDRESS": "[IP]",
+        "LOCATION": "[ADDRESS]"
+      },
+      "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxxxxxxxx"
+      }
     }
+  }
 }
