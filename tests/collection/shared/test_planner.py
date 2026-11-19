@@ -397,6 +397,7 @@ def test_default_platforms_never_include_other():
             Platform.linkedin,
             Platform.facebook,
             Platform.news_blog,
+            Platform.tripadvisor,
         }
 
     # Verify task platforms
@@ -434,6 +435,7 @@ def test_platforms_missing_no_dataset_defaults_to_all_real_platforms():
             Platform.linkedin,
             Platform.facebook,
             Platform.news_blog,
+            Platform.tripadvisor,
         }
 
 

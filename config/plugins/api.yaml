@@ -26,3 +26,28 @@ google_places:
 
   # Cache TTL in days (default 0 = no caching; Google's terms limit storing Places content; confirm before raising it)
   cache_ttl_days: 0.0
+
+tripadvisor_reviews:
+  # RapidAPI listing "Tripadvisor Reviews Scraper" (third-party scraper, not an
+  # official TripAdvisor API). Key: RAPIDAPI_KEY. Pages per company come from
+  # companies.yaml -> api.tripadvisor_urls.
+  host: "tripadvisor-reviews-scraper1.p.rapidapi.com"
+  path: "/"
+
+  # The API returns at most 20 reviews per page per request (newest first).
+  max_reviews_per_place: 20
+  # One request per TripAdvisor page. The free Basic plan allows 10 requests
+  # a month (hard limit), so keep this small.
+  max_places_per_run: 3
+  # Stop requesting more pages once RapidAPI reports this many requests left.
+  min_quota_remaining: 0
+
+  # USD per request. Basic plan is free; Pro is $4.99 for 1,500 requests.
+  cost_per_request: 0.0
+
+  # The API answers in up to 60 s. Retries spend quota, so none by default.
+  request_timeout: 70
+  max_retries: 0
+
+  # Reuse a page's reviews for this many days instead of spending a request.
+  cache_ttl_days: 1.0

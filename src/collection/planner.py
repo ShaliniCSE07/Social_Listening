@@ -74,6 +74,7 @@ REAL_PLATFORMS: Set[Platform] = {
     Platform.linkedin,
     Platform.facebook,
     Platform.news_blog,
+    Platform.tripadvisor,
 }
 
 

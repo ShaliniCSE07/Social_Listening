@@ -10,15 +10,15 @@ from src.contracts.enums import Method, Platform
 def test_registry_finds_all_connectors():
     connectors = get_all_connectors()
     names = {c.name for c in connectors}
-    assert names == {"reddit_api", "google_places", "dataset", "scraping"}
-    assert len(connectors) == 4
+    assert names == {"reddit_api", "google_places", "third_party_tripadvisor", "dataset", "scraping"}
+    assert len(connectors) == 5
 
 
 def test_registry_filter_by_method():
     api_connectors = get_connectors(Method.api)
-    assert len(api_connectors) == 2
+    assert len(api_connectors) == 3
     api_names = {c.name for c in api_connectors}
-    assert api_names == {"reddit_api", "google_places"}
+    assert api_names == {"reddit_api", "google_places", "third_party_tripadvisor"}
 
     dataset_connectors = get_connectors(Method.dataset)
     assert len(dataset_connectors) == 1

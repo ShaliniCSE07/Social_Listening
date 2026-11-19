@@ -254,6 +254,7 @@ export default function RunDetailPage() {
     if (lower === "scraping") return "Web Scraping";
     if (lower === "third_party_reddit") return "Third-Party Reddit";
     if (lower === "third_party_reviews") return "Third-Party Reviews";
+    if (lower === "third_party_tripadvisor") return "TripAdvisor (RapidAPI)";
     return name
       .split("_")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -295,6 +296,12 @@ export default function RunDetailPage() {
       (r.includes("credential") || r.includes("key") || r.includes("missing") || r.includes("places") || r.includes("denied"))
     ) {
       return "Add Google Places API key in .env, or choose a dataset.";
+    }
+    if (r.includes("rapidapi_key") || (r.includes("rapidapi") && (r.includes("rejected") || r.includes("not subscribed")))) {
+      return "Add RAPIDAPI_KEY in .env and subscribe to the API's plan on RapidAPI.";
+    }
+    if (r.includes("tripadvisor urls")) {
+      return "Add the company's TripAdvisor page URLs under api.tripadvisor_urls in companies.yaml.";
     }
     if (r.includes("budget") || r.includes("exhausted") || r.includes("exceeds")) {
       return "Increase run budget limit in Options, or choose free connectors.";

@@ -114,6 +114,15 @@ platforms:
       available: true
       notes: "Web scraping fallback (governed by scraping safety gate)"
 
+  tripadvisor:
+    # No official TripAdvisor review API is available to us.
+    - connector: third_party_tripadvisor
+      method: api
+      cost_class: paid
+      role: first_choice
+      available: true
+      notes: "TripAdvisor reviews via RapidAPI (Tripadvisor Reviews Scraper); pages from companies.yaml api.tripadvisor_urls"
+
   news_blog:
     # No first-choice connector exists (RSS was removed); open with supervisor.
     - connector: dataset

@@ -25,3 +25,14 @@ companies:
     scraping:
       allowed: false
 
+  # Test target for the TripAdvisor (RapidAPI) connector: a Mumbai restaurant.
+  Delhi Highway:
+    alt_spellings: []
+    handles: []
+    branches: []
+    industry: "restaurant"
+    api:
+      tripadvisor_urls:
+        - "https://www.tripadvisor.com/Restaurant_Review-g304554-d20328639-Reviews-Delhi_Highway-Mumbai_Maharashtra.html"
+    scraping:
+      allowed: false

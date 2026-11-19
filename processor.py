@@ -38,10 +38,14 @@ _TEXT_KEYS = (
     "review_text", "review_description", "review",  # datasets
     "comment", "title",                              # titles: link posts, HN stories
 )
-_AUTHOR_KEYS = ("author", "user", "username", "userName", "authorAttribution")
+_AUTHOR_KEYS = (
+    "author", "user", "username", "userName", "authorAttribution",
+    "reviewerName",                                  # TripAdvisor (RapidAPI)
+)
 _DATE_KEYS = (
     "updated", "created", "created_utc", "published",
     "publishTime",                                   # Google Places
+    "publishedAt",                                   # TripAdvisor (RapidAPI)
     "review_date", "date", "at",                     # datasets
 )
 _LIKE_KEYS = ("score", "likes", "ups", "points")
@@ -52,6 +56,9 @@ _VIEW_KEYS = ("views", "view_count")
 # Datasets whose rows were tied to the company by the dataset itself, not by
 # the text (see Member 1's dataset connector, raw_payload.dataset_match_basis).
 _SOURCE_MATCH_BASES = {"company_column", "default_company"}
+# Reviews read from the company's own page on a review site (e.g. its
+# TripAdvisor page) are about the company even when the text never names it.
+_PAGE_MATCH_BASES = {"place_page"}
 
 _catalogue_cache: dict | None = None
 _aliases_cache: dict | None = None
@@ -186,6 +193,8 @@ def _company_match(company: str, text: str, payload: dict) -> tuple[str | None, 
     if any(n.lower() in low for n in names):
         return "names company directly", "confirmed"
     if payload.get("dataset_match_basis") in _SOURCE_MATCH_BASES:
+        return "identified by source", "source"
+    if payload.get("source_match_basis") in _PAGE_MATCH_BASES:
         return "identified by source", "source"
     return None, ""
 

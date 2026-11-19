@@ -181,7 +181,7 @@ def decide(
         c_name = cand.connector
 
         # 0. Real platform tasks must never list dataset connector, except news_blog and history_baseline
-        if plat_str in ("reddit", "google", "twitter_x", "instagram", "linkedin", "facebook") and (
+        if plat_str in ("reddit", "google", "twitter_x", "instagram", "linkedin", "facebook", "tripadvisor") and (
             cand.method == "dataset" or "dataset" in c_name.lower()
         ):
             continue
