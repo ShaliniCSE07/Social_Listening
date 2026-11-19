@@ -83,7 +83,7 @@ if latest_run and str(latest_run.get("status", "")).lower() in ["failed", "parti
                     st.error("Failed to trigger rerun.")
 # --------------------------------------
 
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Process Data", "📄 Records Explorer", "📊 Run Metrics & Rerun", "⏱️ Checkpoints"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Process Data", "📄 Records Explorer", "📊 Run Metrics & Rerun", "⏱️ Checkpoints", "⚙️ Settings"])
 
 # --- TAB 1: Process Data ---
 with tab1:
@@ -215,3 +215,61 @@ with tab4:
         st.data_editor(df_cps, use_container_width=True, hide_index=True, disabled=True, height=400)
     else:
         st.info("No checkpoints found yet.")
+
+# --- TAB 5: Settings (Masking Config) ---
+with tab5:
+    st.markdown("<h3 style='color: #1E293B;'>PII Masking Settings</h3>", unsafe_allow_html=True)
+    st.write("Configure how personal data is masked before it is saved to the database.")
+    
+    # Fetch current config from API
+    try:
+        res = requests.get("http://localhost:8000/api/v1/settings/masking")
+        if res.status_code == 200:
+            config_data = res.json()
+        else:
+            st.error("Failed to load configuration from server.")
+            config_data = {}
+    except Exception as e:
+        st.error(f"Could not connect to backend: {e}")
+        config_data = {}
+
+    if config_data:
+        with st.form("settings_form"):
+            st.subheader("Standard Replacements")
+            st.write("Change the placeholder text for detected entities.")
+            
+            replacements = config_data.get("replacements", {})
+            new_replacements = {}
+            
+            # Dynamically create input fields for each entity
+            for entity, current_val in replacements.items():
+                new_replacements[entity] = st.text_input(f"Mask for {entity}", value=current_val)
+            
+            st.divider()
+            st.subheader("Phone Number Masking")
+            
+            phone_conf = config_data.get("phone_masking", {})
+            preserve_cc = st.checkbox("Preserve Country Code (e.g., +91)", value=phone_conf.get("preserve_country_code", True))
+            mask_str = st.text_input("Phone Mask String", value=phone_conf.get("mask_string", "xxxxxxxxxx"))
+            fallback_mask = st.text_input("Fallback Mask (if no country code)", value=phone_conf.get("fallback_mask", "xxxxxxxxxx"))
+            
+            # Submit button
+            submitted = st.form_submit_button("💾 Save Configuration", use_container_width=True)
+            
+            if submitted:
+                # Build the new config dictionary
+                updated_config = {
+                    "replacements": new_replacements,
+                    "phone_masking": {
+                        "preserve_country_code": preserve_cc,
+                        "mask_string": mask_str,
+                        "fallback_mask": fallback_mask
+                    }
+                }
+                
+                # Send to API
+                save_res = requests.post("http://localhost:8000/api/v1/settings/masking", json=updated_config)
+                if save_res.status_code == 200:
+                    st.success("✅ Configuration saved successfully! The new rules will apply to the next run.")
+                else:
+                    st.error("Failed to save configuration.")

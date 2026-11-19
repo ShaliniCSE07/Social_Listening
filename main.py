@@ -5,6 +5,7 @@ import json
 import uuid
 from collections.abc import Iterable
 from typing import Any
+from fastapi import Body
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -172,3 +173,26 @@ def rerun_failed_job(run_id: str):
     # In a full production setup, this would fetch the original JSONL files from S3 
     # and trigger the pipeline again. For now, we simulate the queueing.
     return {"message": f"Successfully triggered rerun for {run_id}", "status": "queued"}
+
+CONFIG_PATH = "masking_config.json"
+
+@app.get("/api/v1/settings/masking")
+def get_masking_config():
+    """Reads the current masking configuration."""
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"error": "Config file not found"}
+
+@app.post("/api/v1/settings/masking")
+def update_masking_config(config: dict = Body(...)):
+    """Updates the masking configuration."""
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=4)
+    
+    # Force masker.py to reload the config
+    import masker
+    masker.MASK_CONFIG = masker.load_config()
+    
+    return {"message": "Configuration updated successfully"}

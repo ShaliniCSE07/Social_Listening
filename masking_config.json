@@ -1,0 +1,14 @@
+{
+    "replacements": {
+        "EMAIL_ADDRESS": "[EMAIL]",
+        "PERSON": "[NAME]",
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "IP_ADDRESS": "[IP]"
+    },
+    "phone_masking": {
+        "preserve_country_code": true,
+        "mask_string": "xxxxxxxxxx",
+        "fallback_mask": "xxxxxxxxxx"
+    }
+}
