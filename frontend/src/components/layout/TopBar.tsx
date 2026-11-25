@@ -17,6 +17,7 @@ function getPageTitle(pathname: string): string {
   if (pathname === "/runs") return "Collection Runs";
   if (pathname.startsWith("/runs/")) return "Run Details";
   if (pathname === "/sources") return "Source Integrations";
+  if (pathname === "/scraper") return "Web Scraper";
   return "Social Listening";
 }
 
@@ -25,7 +26,7 @@ export function TopBar({ onOpenMobile }: TopBarProps) {
   const title = getPageTitle(pathname);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-4 sm:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/70 bg-background/75 backdrop-blur-md px-4 sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -36,7 +37,7 @@ export function TopBar({ onOpenMobile }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-base sm:text-lg font-semibold text-foreground tracking-tight">
+        <h1 className="eyebrow !text-[0.72rem] text-foreground/70">
           {title}
         </h1>
       </div>

@@ -136,6 +136,50 @@ class RunStore:
                     continue
         return results
 
+    def _load_mentions(
+        self,
+        run_dir: Path,
+        company: Optional[str] = None,
+        platform: Optional[str] = None,
+        method: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read mentions.jsonl for a run and apply the optional filters."""
+        mentions_path = run_dir / "mentions.jsonl"
+        raw_lines: List[Dict[str, Any]] = []
+        if mentions_path.is_file():
+            with open(mentions_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_str = line.strip()
+                    if not line_str:
+                        continue
+                    try:
+                        raw_lines.append(json.loads(line_str))
+                    except Exception:
+                        continue
+
+        filtered: List[Dict[str, Any]] = []
+        for m in raw_lines:
+            if company and m.get("company", "").lower() != company.lower():
+                continue
+            if platform and m.get("platform", "").lower() != platform.lower():
+                continue
+            if method and m.get("method_used", "").lower() != method.lower():
+                continue
+            filtered.append(m)
+        return filtered
+
+    def get_all_mentions(
+        self,
+        run_id: str,
+        company: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Return every (filtered) full mention for a run, or None if the run is unknown."""
+        run_dir = self._get_run_dir(run_id)
+        if not run_dir.exists():
+            return None
+        return self._load_mentions(run_dir, company, platform)
+
     def get_mentions(
         self,
         run_id: str,
@@ -151,29 +195,7 @@ class RunStore:
         if not run_dir.exists():
             return None
 
-        mentions_path = run_dir / "mentions.jsonl"
-        raw_lines: List[Dict[str, Any]] = []
-        if mentions_path.is_file():
-            with open(mentions_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line_str = line.strip()
-                    if not line_str:
-                        continue
-                    try:
-                        raw_lines.append(json.loads(line_str))
-                    except Exception:
-                        continue
-
-        # Filter
-        filtered: List[Dict[str, Any]] = []
-        for m in raw_lines:
-            if company and m.get("company", "").lower() != company.lower():
-                continue
-            if platform and m.get("platform", "").lower() != platform.lower():
-                continue
-            if method and m.get("method_used", "").lower() != method.lower():
-                continue
-            filtered.append(m)
+        filtered = self._load_mentions(run_dir, company, platform, method)
 
         total = len(filtered)
         pages = max(1, math.ceil(total / page_size)) if total > 0 else 1

@@ -9,6 +9,7 @@ import {
   Layers,
   Database,
   Radio,
+  Globe,
   ChevronLeft,
   ChevronRight,
   X,
@@ -27,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "New run", href: "/runs/new", icon: PlusCircle },
   { name: "Runs", href: "/runs", icon: Layers },
   { name: "Sources", href: "/sources", icon: Database },
+  { name: "Web Scraper", href: "/scraper", icon: Globe },
 ];
 
 interface SidebarProps {
@@ -52,20 +54,25 @@ export function Sidebar({
   };
 
   const navContent = (
-    <div className="flex flex-col h-full bg-card border-r border-border">
+    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       {/* Brand */}
-      <div className="flex items-center justify-between h-14 px-4 border-b border-border">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
         <Link
           href="/"
-          className="flex items-center gap-2.5 font-semibold text-foreground overflow-hidden"
+          className="flex items-center gap-3 overflow-hidden"
           onClick={onCloseMobile}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0 shadow-sm">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-primary to-highlight text-primary-foreground shrink-0 shadow-lift ring-1 ring-white/10">
             <Radio className="h-4 w-4" />
           </div>
           {!collapsed && (
-            <span className="text-base tracking-tight truncate font-semibold">
-              Social Listening
+            <span className="flex flex-col leading-none min-w-0">
+              <span className="font-display text-[1.05rem] font-semibold tracking-tight truncate">
+                Social Listening
+              </span>
+              <span className="mt-1 text-[0.65rem] uppercase tracking-[0.18em] text-sidebar-muted truncate">
+                Signal desk
+              </span>
             </span>
           )}
         </Link>
@@ -74,7 +81,7 @@ export function Sidebar({
           variant="ghost"
           size="icon"
           onClick={onCloseMobile}
-          className="md:hidden h-8 w-8"
+          className="md:hidden h-8 w-8 text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-hover"
           aria-label="Close navigation"
         >
           <X className="h-4 w-4" />
@@ -82,7 +89,8 @@ export function Sidebar({
       </div>
 
       {/* Nav Links */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {!collapsed && <p className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-sidebar-muted/80">Workspace</p>}
         {NAV_ITEMS.map((item) => {
           const active = isItemActive(item.href);
           const Icon = item.icon;
@@ -92,17 +100,20 @@ export function Sidebar({
               href={item.href}
               onClick={onCloseMobile}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative",
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative",
                 active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  ? "bg-sidebar-active text-sidebar-foreground shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.35)]"
+                  : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-hover"
               )}
               title={collapsed ? item.name : undefined}
             >
+              {active && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-highlight" aria-hidden="true" />
+              )}
               <Icon
                 className={cn(
                   "h-4 w-4 shrink-0 transition-transform group-hover:scale-105",
-                  active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
+                  active ? "text-highlight" : "text-sidebar-muted group-hover:text-sidebar-foreground"
                 )}
               />
               {!collapsed && <span className="truncate">{item.name}</span>}
@@ -112,12 +123,12 @@ export function Sidebar({
       </nav>
 
       {/* Collapse button (desktop only) */}
-      <div className="p-2 border-t border-border hidden md:block">
+      <div className="p-3 border-t border-sidebar-border hidden md:block">
         <Button
           variant="ghost"
           size="sm"
           onClick={onToggleCollapse}
-          className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+          className="w-full flex items-center justify-center gap-2 text-xs text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-hover"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
@@ -139,7 +150,7 @@ export function Sidebar({
       <aside
         className={cn(
           "hidden md:block transition-all duration-200 shrink-0 select-none z-30 sticky top-0 h-screen",
-          collapsed ? "w-16" : "w-60"
+          collapsed ? "w-[4.5rem]" : "w-64"
         )}
       >
         {navContent}
@@ -157,7 +168,7 @@ export function Sidebar({
       {/* Mobile Drawer */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 bg-card md:hidden transform transition-transform duration-200 ease-in-out shadow-2xl",
+          "fixed inset-y-0 left-0 z-50 w-72 bg-sidebar md:hidden transform transition-transform duration-200 ease-in-out shadow-2xl",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >

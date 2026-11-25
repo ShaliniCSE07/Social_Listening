@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union
 import requests
 
 from config.settings import load_plugin_config
+from src.collection.platform_filter import parse_platform_filter, resolve_platform
 from src.collection.base import BaseConnector, CollectionRequest
 from src.collection.common.dates import to_utc
 from src.collection.common.text import matches_company
@@ -99,6 +100,7 @@ class DatasetConnector(BaseConnector):
 
         all_mentions: List[RawMention] = []
         attempts: List[CollectionAttempt] = []
+        platform_filter = parse_platform_filter(request.platform_filter)
         now_utc = datetime.now(timezone.utc)
 
         for entry in selected_entries:
@@ -316,6 +318,7 @@ class DatasetConnector(BaseConnector):
             read_error: Optional[str] = None
             row_errors = 0
             date_parse_warnings = 0
+            platform_skipped = 0
             has_date_filter = bool(request.date_from or request.date_to)
             filter_date_from = to_utc(request.date_from) if request.date_from else None
             filter_date_to = to_utc(request.date_to) if request.date_to else None
@@ -336,6 +339,16 @@ class DatasetConnector(BaseConnector):
 
                     try:
                         mapped = map_row(raw_row, entry.columns)
+
+                        # Platform filter: a per-row platform column (if mapped)
+                        # decides; otherwise the catalogue entry's platform does.
+                        row_platform = mapped.get("platform")
+                        row_platform = str(row_platform).strip() if row_platform not in (None, "") else None
+                        if platform_filter.active and not platform_filter.allows_mention(
+                            row_platform or entry.platform, row_platform, entry.name, entry.key
+                        ):
+                            platform_skipped += 1
+                            continue
 
                         # Match determination:
                         # 1. Mapped company column wins and default_company is ignored
@@ -365,6 +378,10 @@ class DatasetConnector(BaseConnector):
                             match_basis = "text_mention"
 
                         payload = dict(raw_row)
+                        # Expose the catalogue-mapped rating under a standard key
+                        # so the star-rating summary works for any column name.
+                        if mapped.get("rating") not in (None, ""):
+                            payload["rating_mapped"] = mapped.get("rating")
 
                         if has_date_filter:
                             row_dt = to_utc(mapped.get("date"))
@@ -400,6 +417,9 @@ class DatasetConnector(BaseConnector):
                             if entry.platform in Platform.__members__
                             else Platform.other
                         )
+                        if row_platform:
+                            payload["platform_mapped"] = row_platform
+                            plat_enum = resolve_platform(row_platform) or plat_enum
                         content_type_enum = (
                             ContentType(entry.content_type)
                             if entry.content_type in ContentType.__members__
@@ -462,6 +482,11 @@ class DatasetConnector(BaseConnector):
 
             if date_parse_warnings > 0:
                 reason_parts.append(f"{date_parse_warnings} rows had unreadable dates")
+
+            if platform_skipped > 0:
+                reason_parts.append(
+                    f"{platform_skipped} rows skipped by platform filter ({platform_filter.describe()})"
+                )
 
             final_license = dataset_license or entry.license_note
             if final_license:

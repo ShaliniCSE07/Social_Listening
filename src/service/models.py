@@ -61,6 +61,8 @@ class CreateRunRequest(BaseModel):
     require_fresh: Optional[bool] = None
     refresh: Optional[bool] = None
     scraping_allowed: Optional[bool] = False
+    # Only collect from these platforms, e.g. ["instagram", "google"]. Empty/None = all.
+    platform_filter: Optional[List[str]] = None
 
     @field_validator("companies")
     @classmethod
@@ -104,6 +106,7 @@ class RunDetailResponse(BaseModel):
     task_outcomes: Optional[List[Dict[str, Any]]] = None
     decisions: Optional[List[Dict[str, Any]]] = None
     invalid_companies: Optional[List[Dict[str, Any]]] = None
+    platform_filter: Optional[Dict[str, Any]] = None
 
 
 class CompactMention(BaseModel):
@@ -144,3 +147,21 @@ class PaginatedMentionsResponse(BaseModel):
     page_size: int
     pages: int
 
+
+
+class StarBucket(BaseModel):
+    stars: int
+    count: int
+    percent: float
+
+
+class RatingBreakdown(BaseModel):
+    total_mentions: int
+    rated_count: int
+    unrated_count: int
+    average: Optional[float] = None
+    distribution: List[StarBucket]
+
+
+class RatingSummaryResponse(RatingBreakdown):
+    by_platform: Dict[str, RatingBreakdown] = Field(default_factory=dict)

@@ -55,6 +55,22 @@ const config: Config = {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
         },
+        highlight: {
+          DEFAULT: "hsl(var(--highlight))",
+          foreground: "hsl(var(--highlight-foreground))",
+        },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          muted: "hsl(var(--sidebar-muted))",
+          border: "hsl(var(--sidebar-border))",
+          hover: "hsl(var(--sidebar-hover))",
+          active: "hsl(var(--sidebar-active))",
+        },
+      },
+      boxShadow: {
+        soft: "0 1px 2px hsl(var(--shadow) / 0.04), 0 8px 24px -14px hsl(var(--shadow) / 0.18)",
+        lift: "0 2px 4px hsl(var(--shadow) / 0.05), 0 16px 32px -16px hsl(var(--shadow) / 0.28)",
       },
       borderRadius: {
         xl: "var(--radius)",
@@ -63,7 +79,9 @@ const config: Config = {
         sm: "calc(var(--radius) - 6px)",
       },
       fontFamily: {
+        display: ["var(--font-display)", "Georgia", "serif"],
         sans: [
+          "var(--font-sans)",
           "Inter",
           "-apple-system",
           "BlinkMacSystemFont",

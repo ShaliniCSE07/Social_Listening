@@ -25,6 +25,10 @@ class CollectionRequest(BaseModel):
     max_age_days: Optional[float] = None
     require_fresh: bool = False
     refresh: bool = False
+    platform_filter: List[str] = Field(
+        default_factory=list,
+        description="Only keep items from these platforms (empty = all)",
+    )
 
 
 class BaseConnector(ABC):
