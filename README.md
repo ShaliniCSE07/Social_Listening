@@ -42,6 +42,50 @@ copy .env.example .env.local
 | Collection dashboard | `cd frontend && npm run dev` | http://localhost:3000 |
 | Processing dashboard | `streamlit run app_ui.py` | http://localhost:8501 |
 
+### Windows (PowerShell) step by step
+
+**Part 1: Setup (run once)**
+
+1. Create the virtual environment
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   ```
+2. Install Python dependencies
+   ```powershell
+   pip install -r requirements.txt
+   python -m spacy download en_core_web_lg
+   ```
+3. Create the environment file and an author pepper (save the generated value; you need the same one every time)
+   ```powershell
+   Copy-Item .env.example .env
+   $pepper = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
+   $env:SOCL_AUTHOR_PEPPER = $pepper
+   $pepper    # prints the value so you can save it
+   ```
+4. Set up the collection frontend
+   ```powershell
+   cd frontend
+   npm install
+   Copy-Item .env.example .env.local
+   cd ..
+   ```
+5. Create the MongoDB container (Docker)
+   ```powershell
+   docker run -d --name socl-mongo -p 27017:27017 mongo:8.0
+   ```
+
+**Part 2: Start the system (every time)** — four terminals, all from the project folder:
+
+| Terminal | Commands |
+|---|---|
+| 1. Database | `docker start socl-mongo` then `docker ps` to check it is running |
+| 2. Collection frontend | `cd frontend` then `npm run dev` |
+| 3. Backend API | `.venv\Scripts\Activate.ps1`<br>`$env:SOCL_AUTHOR_PEPPER = "your-saved-pepper-key"` (must be set every time)<br>`uvicorn src.service.main:app --reload --port 8000` |
+| 4. Processing dashboard (Streamlit) | `.venv\Scripts\Activate.ps1` then `streamlit run app_ui.py` |
+
+Tip: instead of setting the pepper in every session, you can put `SOCL_AUTHOR_PEPPER=your-saved-pepper-key` in `.env`; the backend reads it on start.
+
 ### Environment variables (`.env`)
 
 | Variable | Used for |
