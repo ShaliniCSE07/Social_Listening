@@ -1,208 +1,219 @@
 # Social Listening System
 
-A modular social media listening and sentiment analytics platform built in Python 3.11+.
-
-## Architecture & Layout
+Collects what people say about companies online (reviews, posts, comments), then cleans, de-duplicates, masks personal data and stores it for analysis. One FastAPI backend serves both stages, with a Next.js dashboard for collection and a Streamlit dashboard for processing.
 
 ```
-.
-├── config/                  # Configuration files and settings loader
-│   ├── plugins/             # Per-plugin configuration files
-│   │   ├── api.yaml
-│   │   ├── dataset.yaml
-│   │   ├── scraping.yaml
-│   │   └── source_policy.yaml # Data-driven source candidates and scraping policy
-│   ├── config.yaml          # Global pipeline settings
-│   ├── companies.yaml       # Monitored companies & targeting definitions
-│   └── settings.py          # Unified settings loader with environment overrides
-├── src/
-│   ├── contracts/           # Shared domain models, enums, schemas & serialization
-│   │   ├── enums.py         # Standard Platform, Method, ContentType, AttemptStatus
-│   │   ├── schemas.py       # Pydantic v2 domain schemas (RawMention, CollectionAttempt)
-│   │   └── io.py            # Line-delimited JSON (JSONL) writers and readers
-│   ├── collection/          # Collection layer (Member 1)
-│   │   ├── common/          # Shared HTTP session and text utilities
-│   │   ├── plugins/         # Auto-discovered collection plugins
-│   │   │   ├── api/         # Direct API connectors (Reddit, Google Places, etc.)
-│   │   │   ├── dataset/     # Offline/historical dataset connectors
-│   │   │   └── scraping/    # Web scraping connectors (governed by safety gate)
-│   │   ├── base.py          # BaseConnector and CollectionRequest interfaces
-│   │   ├── planner.py       # Input normalization & collection request planner
-│   │   ├── policy.py        # Data-driven source selection policy loader
-│   │   ├── registry.py      # Dynamic plugin discovery registry
-│   │   ├── agent.py         # Task candidate evaluation, ranking & decision engine
-│   │   ├── executor.py      # Fallback chain executor and collection pipeline runner
-│   │   ├── budget.py        # Shared budget manager (placeholder)
-│   │   └── fallback.py      # Dynamic fallback handler (placeholder)
-│   ├── processing/          # Normalization, cleaning & validation (Member 2)
-│   ├── storage/             # Raw, processed, and checkpoint stores (Member 2)
-│   ├── reporting/           # Report generation and analytics (Member 2)
-│   └── pipeline.py          # End-to-end orchestration pipeline (Member 2)
-├── tests/                   # Comprehensive unit and integration test suite
-├── data/                    # Storage roots (mock, raw, processed, checkpoints, output)
-└── docs/                    # Architecture and handoff specifications
+ Sources                         Collection                      Processing                      Storage
+ ───────                         ──────────                      ──────────                      ───────
+ APIs (Reddit, Google Places,    plan → choose method →          validate → clean → de-duplicate
+ TripAdvisor via RapidAPI)  ──►  fallback chain → budget   ──►   → company match → mask PII  ──►  MongoDB
+ Datasets (local, Kaggle, URL)   data/runs/<id>/                 → pseudonymize authors →        (records, runs,
+ Web scraping (polite, gated)    mentions.jsonl + attempts.jsonl   version + delta checkpoints     checkpoints)
 ```
 
-## Running the API Service
+---
 
-Start the FastAPI service:
+## Quick start
+
+**Requirements:** Python 3.11+, Node.js 18.17+, and MongoDB on `localhost:27017` (only needed for processing).
 
 ```bash
-uvicorn src.service.main:app --reload --port 8000
-```
-
-## Running Tests
-
-Install required dependencies:
-
-```bash
+# Backend
+python -m venv .venv
+.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-```
+copy .env.example .env            # macOS/Linux: cp .env.example .env, then fill in the values
 
-Run test suite:
+# Optional: browser mode for the Web Scraper (JavaScript-loaded pages)
+set PLAYWRIGHT_BROWSERS_PATH=.playwright
+python -m playwright install --only-shell chromium
 
-```bash
-python -m pytest -v
-```
-
-By default, tests marked with `@pytest.mark.live` (requiring active internet/network) are skipped.
-
-## Collection Planner CLI
-
-Generate collection requests and execution tasks from JSON or YAML target definitions:
-
-```bash
-python -m src.collection.planner --input targets.json
-```
-
-## Collection Agent & Source Policy CLI
-
-Evaluate eligible collection methods and explain candidate ranking per task:
-
-```bash
-python -m src.collection.agent --input targets.json --explain
-```
-
-## Collection Pipeline Executor CLI
-
-Execute collection tasks with fallback chains, scraping safety gates, and budget tracking:
-
-```bash
-python -m src.collection.executor --input targets.json --out data/output
-```
-
-## Scraping Policy & Safety Gating
-
-- **One Source of Truth for Sites**: `config/plugins/scraping_sites.yaml` is the single source of truth for scraping permissions (`allows_scraping`) and site-to-platform mapping (e.g. `hackernews` mapped to platform `news_blog` to participate in dataset fallback chains).
-- **Candidate Eligibility**: Scraping is eligible as a candidate only when `request.scraping_allowed` is `true` and the platform has a site with `allows_scraping: true` in `scraping_sites.yaml`. Otherwise it is rejected with reason `"scraping not allowed for this run"`.
-- **Three-Condition Execution Gate**: Before running scraping, the executor verifies:
-  1. `site_policy_allows`: Site configuration permits scraping.
-  2. `other_methods_failed`: Every earlier method was attempted and ended `failed`, `rate_limited`, or `empty` (or if no earlier method was eligible, recorded as `true` with detail `"no other method available"`).
-  3. `below_min_threshold`: Collected items so far < `scraping.min_results_threshold` (default 5).
-  All three boolean checks are recorded in `attempt.scraping_checks`. Any `false` check skips execution without fetching.
-- **Polite Crawling**: Each site's `robots.txt` is read once per run. Disallowed paths are skipped, and the wait between pages is the larger of the site's `min_delay_seconds` and the `robots.txt` `Crawl-delay` (Hacker News: 30 seconds, so a 5-page scrape takes about 2 minutes). If `robots.txt` returns 401/403, nothing is fetched.
-- **Fallback Provenance**: When scraping succeeds, its `RawMention` records carry `fallback_from` indicating the prior method that failed or fell short.
-- **Service Plan Transparency**: `POST /api/plan` respects `scraping_allowed` and surfaces scraping candidates as `conditional: true` with the three conditions and known plan-time status.
-
-
-## Frontend
-
-The frontend is a Next.js (App Router) application with TypeScript and Tailwind CSS.
-
-### Setup
-
-```bash
+# Frontend
 cd frontend
 npm install
-cp .env.example .env.local   # default: NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+copy .env.example .env.local
 ```
 
-### Development
+**Run** (each in its own terminal, from the project folder):
 
-Start the backend first, then the frontend:
+| What | Command | URL |
+|---|---|---|
+| Backend (collection + processing API) | `uvicorn src.service.main:app --reload --port 8000` | http://localhost:8000/docs |
+| Collection dashboard | `cd frontend && npm run dev` | http://localhost:3000 |
+| Processing dashboard | `streamlit run app_ui.py` | http://localhost:8501 |
 
-```bash
-# Terminal 1 – backend
-uvicorn src.service.main:app --reload --port 8000
+### Environment variables (`.env`)
 
-# Terminal 2 – frontend
-cd frontend
-npm run dev
-```
-
-The frontend runs at http://localhost:3000.
-
-### Lint, Build & Test
-
-```bash
-cd frontend
-npm run lint
-npm run build
-npm test
-```
-
-### Page Map & Features
-
-- **`/` — Dashboard**: Stat cards (total runs, total mentions, spend, completion rate computed from runs), recent runs preview, source connector readiness, and quick launch button.
-- **`/runs/new` — New Run Wizard**: 4-step workflow (Companies with bulk-paste support, Live API & Dataset catalog selection with select-all tabs, Budget and date window options, Review & Launch) with live sticky summary.
-- **`/runs` — Collection Runs**: Filterable and searchable table by company or run ID, sortable columns, status badges with icons, exact timestamps in tooltips, and pagination.
-- **`/runs/[id]` — Run Details**: Header with live polling indicator, duration, copy run ID, and direct `.jsonl` download actions. Tabs for Overview (budget progress bar & platform spend), Mentions (searchable table with side-drawer inspector & JSON export), Attempts (timeline grouped by company), and Downloads.
-- **`/sources` — Source Integrations**: Overview of active API platforms, authentication state, and offline dataset catalogs without exposing secrets.
-- **App Shell**: Collapsible left sidebar, top bar with real-time backend health check (`/health` rechecked every 30s) and light/dark theme toggle (persisted in `localStorage`).
-
-### Capturing Screenshots
-
-1. Ensure the backend is running on `http://localhost:8000`:
-   ```bash
-   uvicorn src.service.main:app --reload --port 8000
-   ```
-2. Start the Next.js development server:
-   ```bash
-   cd frontend && npm run dev
-   ```
-3. Open `http://localhost:3000` in your browser. Use browser devtools (e.g., Device Toolbar or standard viewport capture) to take desktop and mobile screenshots across `/`, `/runs/new`, `/runs`, `/runs/[id]`, and `/sources`.
-
-
-
-## Collection → Processing Workflow
-
-Collection (Member 1) and processing (Member 2) run in **one backend**. A collection run happens first; when it has finished, its output is handed to processing through a gateway.
-
-```
-Next.js dashboard (:3000)                 Processing dashboard (Streamlit, :8501)
-  /runs/[id]  ── "Send to processing" ──┐        │  (Mentions/Attempts upload, records, checkpoints)
-              ── "Open processing dashboard" ───►│
-                                        ▼        ▼
-                      FastAPI backend :8000  (uvicorn src.service.main:app)
-          /api/runs/...  collection         /process, /runs/{id}/records, /api/v1/...  processing
-                │ writes data/runs/<id>/mentions.jsonl + attempts.jsonl
-                └──► POST /api/runs/<id>/process ──► main.process_handoff ──► MongoDB
-```
-
-**Gateway endpoints** (`src/service/routes/processing.py`, logic in `src/service/processing_gateway.py`):
-
-| Endpoint | What it does |
+| Variable | Used for |
 |---|---|
-| `GET /api/processing/status` | Whether processing can run here (`available`, `reason`) |
-| `GET /api/runs/{id}/processing` | Processing state of a run: `not_started`, `queued`, `running`, `completed`, `failed` |
-| `POST /api/runs/{id}/process` | Sends a `completed` or `partial` run to processing (202). 409 if the run is unfinished, empty or already processed; 503 if processing is unavailable |
+| `RAPIDAPI_KEY` | TripAdvisor reviews (one key works for every RapidAPI listing) |
+| `GOOGLE_PLACES_API_KEY` | Google Places reviews |
+| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` | Reddit search |
+| `KAGGLE_USERNAME`, `KAGGLE_KEY` | Downloading Kaggle datasets |
+| `SCRAPER_USER_AGENT_NAME`, `SCRAPER_CONTACT` | Identifying the scraper to websites |
+| `SOCL_MONGO_URI` | MongoDB connection (default `mongodb://localhost:27017`) |
+| `SOCL_AUTHOR_PEPPER` | Secret used to pseudonymize author names (required for processing) |
 
-- The collection run ID is reused as the processing run ID, so the same ID appears in both dashboards.
-- Processing state is saved in `data/runs/<id>/processing.json`; `run_summary.json` is not changed.
-- Collection-only attempt fields (`pages_fetched`, `pages_from_cache`, `delay_used`) are dropped before handoff, because the processing `CollectionAttempt` model does not declare them.
-- Industry per company comes from `config/companies.yaml`.
-- If processing cannot load (MongoDB down, Presidio not installed, `SOCL_AUTHOR_PEPPER` unset), collection still works and the run page explains why processing is unavailable.
+Frontend (`frontend/.env.local`): `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`) and `NEXT_PUBLIC_PROCESSING_DASHBOARD_URL` (default `http://localhost:8501`).
 
-**Running everything together**
+A source without its keys is shown as "needs setup" on the **Sources** page and is skipped; everything else keeps working.
+
+---
+
+## Collection
+
+### Sources
+
+| Method | Source | Platform | Notes |
+|---|---|---|---|
+| API | Reddit | `reddit` | Posts found by Reddit search for the company |
+| API | Google Places | `google` | Up to 5 reviews per place |
+| API | TripAdvisor (RapidAPI) | `tripadvisor` | Reviews from the URLs in `api.tripadvisor_urls` in `companies.yaml`; 1 request per page, cached per day |
+| Dataset | Local files, Kaggle, URL | from catalogue | Defined in `config/plugins/dataset_catalogue.yaml` with a column mapping (`text`, `date`, `rating`, `company`, `platform`, …) |
+| Scraping | Hacker News | `news_blog` | Only as a last resort, see below |
+
+### How a run works
+
+1. **Plan:** companies (name, alternate spellings, handles, branches, industry) plus chosen sources, date window and budget become one task per company and platform.
+2. **Choose a method:** each task ranks its candidates (API → dataset → scraping) using `source_policy.yaml`; unusable ones are rejected with a reason.
+3. **Execute with fallback:** if a method fails, is rate-limited or returns too little, the next one runs. A shared budget stops paid calls once the limit is reached.
+4. **Output:** `data/runs/<run_id>/mentions.jsonl` (one `RawMention` per item), `attempts.jsonl` (one `CollectionAttempt` per try) and `run_summary.json`. The formats are defined in `src/contracts/schemas.py`.
+
+**Scraping safety gate.** Scraping runs only when the run allows it, the site allows it in `scraping_sites.yaml`, every earlier method failed or came back empty, and fewer than `min_results_threshold` items were collected. It obeys `robots.txt` and waits between pages (Hacker News: 30 seconds).
+
+**Platform filter (optional).** On New run you can limit collection to platforms such as Instagram, Google or TripAdvisor, or free text like "play store". Sources for other platforms are skipped before they run (no API quota used), dataset rows are filtered by their platform column, and a final check drops anything else. Empty means collect from everything.
+
+**Star rating summary.** Every run page shows the average rating and the share of reviews at each star level, overall and per platform, for any source that provides ratings.
+
+### Configuration
+
+| File | Contents |
+|---|---|
+| `config/companies.yaml` | Monitored companies: alternate spellings, handles, branches, industry, TripAdvisor URLs |
+| `config/config.yaml` | Global pipeline settings |
+| `config/plugins/api.yaml` | API connector settings and limits (e.g. `max_places_per_run`) |
+| `config/plugins/dataset_catalogue.yaml` | Datasets and their column mappings |
+| `config/plugins/scraping_sites.yaml` | Sites that may be scraped, platform mapping, delays |
+| `config/plugins/source_policy.yaml` | Which methods are tried for each platform, in which order, and the scraping threshold |
+
+### Command-line tools
 
 ```bash
-# 1. MongoDB on localhost:27017, and in .env: SOCL_AUTHOR_PEPPER=<any secret>
-# 2. One backend for both collection and processing
-uvicorn src.service.main:app --reload --port 8000
-# 3. Collection dashboard
-cd frontend && npm run dev
-# 4. Processing dashboard
-streamlit run app_ui.py
+python -m src.collection.planner  --input targets.json                  # show the planned tasks
+python -m src.collection.agent    --input targets.json --explain        # explain method ranking
+python -m src.collection.executor --input targets.json --out data/output
+python -m src.collection.plugins.dataset.cli --company Zomato --dataset kaggle_zomato_playstore_2025
 ```
 
-Then start a run in `/runs/new`, open it, and when collection finishes click **Send to processing**, then **Open processing dashboard**. The processing dashboard URL can be changed with `NEXT_PUBLIC_PROCESSING_DASHBOARD_URL` in `frontend/.env.local` (default `http://localhost:8501`).
+---
+
+## Web Scraper
+
+A separate tool (sidebar → **Web Scraper**) that takes any review page URL and returns a `mentions.jsonl` in the same format as collection runs. Results are saved in `data/review_scrapes/<scrape_id>/`.
+
+- **Extraction:** structured review data (JSON-LD, microdata), review blocks found by their markup, and repeated review cards inside a reviews section. Stars, author, date and Recommended / Not recommended are captured when present.
+- **Modes:** *Auto* reads the page HTML and switches to a headless browser (Playwright) only when no reviews are found; *Fast* uses HTML only; *Browser* always runs the page's JavaScript.
+- **Rules:** respects `robots.txt` (also after redirects), fetches public addresses only, follows up to 10 "next" pages with a delay, and never bypasses logins, captchas or bot protection. Those cases are reported in plain language, and the page's overall rating is shown when review texts are hidden.
+- **Works well on** pages that show reviews publicly (e.g. Sitejabber, Goodreads, Steam). Sites that block bots or require sign-in (e.g. Amazon, Zomato, TripAdvisor, Trustpilot) need an official API or data provider instead.
+
+---
+
+## Processing
+
+### From collection to processing
+
+When a run has finished, click **Send to processing** on its page (or upload the two JSONL files in the processing dashboard). The run ID stays the same in both dashboards.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/processing/status` | Whether processing is available (MongoDB, Presidio, pepper) |
+| `POST /api/runs/{id}/process` | Hand a `completed` or `partial` run to processing |
+| `GET /api/runs/{id}/processing` | State: `not_started`, `queued`, `running`, `completed`, `failed` |
+
+If processing can't start (for example MongoDB is down), collection keeps working and the run page explains why.
+
+### Pipeline (per mention)
+
+| Step | What happens |
+|---|---|
+| Validate | Strict schema check of every mention and attempt |
+| Clean | Mentions without text are quarantined |
+| De-duplicate | By platform item ID, then URL, then text + date |
+| Company match | Name, alternate spellings, handles or dataset tag; others are dropped as wrong company |
+| Mask personal data | Presidio replaces emails, phones (country code kept), names, cards, IBANs, IPs, addresses and more, using the rules for the author's country when known, otherwise the global default |
+| Pseudonymize | Author handles become stable hashes (salted with `SOCL_AUTHOR_PEPPER`) |
+| Label and check | Content type, mention type, missing URL or date flagged as incomplete |
+| Version | A changed mention is stored as a new version that supersedes the old one |
+| Save and report | Records saved to MongoDB; a run report with counts (collected, duplicates, wrong company, quarantined, incomplete, updated) |
+
+**Delta loads.** The first load of a company and platform looks back 90 days; later loads start from the last checkpoint minus a 2-day overlap. Checkpoints move forward only for platforms whose collection succeeded.
+
+**Masking rules** live in `masking_config.json`: a global default (strictest of GDPR and India DPDP) plus per-country overrides (e.g. India, US). They can be edited in the processing dashboard.
+
+### Storage (MongoDB database `socl_db`)
+
+| Collection | Contents |
+|---|---|
+| `records` | Processed, masked mentions with version history |
+| `runs` | Run receipts with counters and report |
+| `checkpoints` | Last loaded point per company and platform |
+
+### Processing dashboard and API
+
+The Streamlit dashboard has tabs for **Process Data** (upload JSONL), **Records Explorer**, **Run Metrics & Rerun**, **Checkpoints** and **Settings** (masking rules). It uses these routes on the same backend:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /process` | Process uploaded `mentions.jsonl` + `attempts.jsonl` (optional industry mapping) |
+| `GET /runs/{run_id}/records` | Stream a run's processed records |
+| `POST /api/v1/runs/{run_id}/rerun` | Rerun a failed job |
+| `GET` / `POST /api/v1/settings/masking` | Read or update masking rules |
+
+---
+
+## Collection dashboard pages
+
+| Page | What it does |
+|---|---|
+| `/` Dashboard | Run totals, recent runs, source readiness |
+| `/runs/new` | Four steps: companies, sources (and platform filter), options, review and launch |
+| `/runs` | Searchable, sortable list of runs |
+| `/runs/[id]` | Status, star rating summary, mentions, attempts, downloads, Send to processing |
+| `/sources` | API keys status, datasets and scraping sites (no secrets shown) |
+| `/scraper` | Web Scraper |
+
+Main collection endpoints: `POST /api/runs`, `GET /api/runs`, `GET /api/runs/{id}`, `/mentions`, `/attempts`, `/ratings`, `/download`, `POST /api/plan`, `/api/config/*`, and `/api/review-scraper`. Full list at http://localhost:8000/docs.
+
+---
+
+## Project layout
+
+```
+config/                 settings, companies and per-plugin configuration
+src/
+  contracts/            shared schemas (RawMention, CollectionAttempt) and JSONL I/O
+  collection/           planner, agent, executor, budget, platform filter
+    plugins/            api/ (Reddit, Google Places, TripAdvisor), dataset/, scraping/
+  review_scraper/       Web Scraper engine (fetcher, browser, extractors)
+  reporting/            star rating summary
+  service/              FastAPI app, run store, runner, processing gateway, routes
+main.py, processor.py   processing API and pipeline
+masker.py, pseudonym.py personal-data masking and author pseudonymization
+checkpoint.py           delta windows and checkpoints
+storage.py, models.py   MongoDB access and processing models
+app_ui.py               processing dashboard (Streamlit)
+frontend/               collection dashboard (Next.js, TypeScript, Tailwind)
+tests/                  backend tests; frontend tests in frontend/src/__tests__
+data/                   run outputs, caches and downloads (not committed)
+docs/                   handoff contract and acceptance notes
+```
+
+## Tests
+
+```bash
+python -m pytest                 # backend (tests marked "live" are skipped by default)
+cd frontend && npm test          # frontend
+cd frontend && npm run lint && npm run build
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch workflow and how to add a collection plugin.
