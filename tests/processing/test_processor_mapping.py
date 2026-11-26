@@ -104,6 +104,20 @@ def test_google_places_review_shape():
     assert mapped["place"] == "Zomato HQ"
 
 
+def test_tripadvisor_rapidapi_review_shape():
+    payload = {"reviewId": "1085940974", "rating": 5, "title": "Great stay",
+               "text": "The staff was welcoming and very helpful.",
+               "publishedAt": "2026-11-18T17:53:01.925Z", "reviewerName": "Reviewer A",
+               "language": "en", "placeName": "Hotel Edison Times Square",
+               "source_match_basis": "place_page"}
+    mapped = processor._map_from_payload(_raw(payload, platform=Platform.TRIPADVISOR, method=Method.API))
+    assert mapped["text"] == "The staff was welcoming and very helpful."
+    assert mapped["author_handle"] == "Reviewer A"
+    assert mapped["rating"] == 5.0
+    assert mapped["posted_at"] == datetime(2026, 11, 18, 17, 53, 1, 925000, tzinfo=timezone.utc)
+    assert mapped["language"] == "en"
+
+
 def test_hackernews_story_uses_title_and_comment_uses_text():
     story = {"item_id": "1", "title": "Amazon launches X", "text": None, "author": "pg", "points": 50,
              "comment_count": 10}
@@ -135,6 +149,7 @@ def test_original_reddit_rss_payload_maps_as_before():
         ("Great app", {"dataset_match_basis": "company_column"}, ("identified by source", "source")),
         ("Great app", {"dataset_match_basis": "default_company"}, ("identified by source", "source")),
         ("Great app", {"dataset_match_basis": "text_mention"}, (None, "")),
+        ("Lovely staff", {"source_match_basis": "place_page"}, ("identified by source", "source")),
         ("Unrelated post", {}, (None, "")),
     ],
 )

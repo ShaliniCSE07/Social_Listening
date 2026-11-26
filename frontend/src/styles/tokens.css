@@ -1,79 +1,116 @@
+/*
+ * "Ink & Saffron" theme.
+ * Warm paper surfaces, deep ink text, deep teal as the primary colour and a
+ * sparing saffron highlight. Values are HSL triplets used as hsl(var(--x)).
+ */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 40 33% 97.5%;
+  --foreground: 200 30% 12%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card: 40 40% 99.5%;
+  --card-foreground: 200 30% 12%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  --popover: 40 40% 99.5%;
+  --popover-foreground: 200 30% 12%;
 
-  --primary: 238.7 77% 58%;
-  --primary-foreground: 210 40% 98%;
+  /* deep teal */
+  --primary: 178 64% 27%;
+  --primary-foreground: 40 40% 98%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 38 24% 93%;
+  --secondary-foreground: 200 30% 16%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 38 24% 93.5%;
+  --muted-foreground: 200 9% 41%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  /* neutral warm hover surface (menus, ghost buttons) */
+  --accent: 38 28% 91%;
+  --accent-foreground: 200 30% 12%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  /* saffron highlight: stars, rating bars, small markers */
+  --highlight: 32 92% 52%;
+  --highlight-foreground: 30 60% 12%;
 
-  --success: 142.1 70.6% 45.3%;
-  --success-foreground: 144 61% 20%;
+  --destructive: 356 66% 50%;
+  --destructive-foreground: 40 40% 98%;
 
-  --warning: 38 92% 50%;
-  --warning-foreground: 48 96% 15%;
+  --success: 152 55% 36%;
+  --success-foreground: 152 60% 14%;
 
-  --info: 199 89% 48%;
-  --info-foreground: 200 98% 18%;
+  --warning: 36 92% 50%;
+  --warning-foreground: 36 90% 15%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 238.7 77% 58%;
+  --info: 190 70% 38%;
+  --info-foreground: 190 80% 14%;
 
-  --radius: 0.75rem;
+  --border: 36 20% 87%;
+  --input: 36 18% 84%;
+  --ring: 178 64% 32%;
+
+  /* sidebar: dark ink panel in both themes */
+  --sidebar: 200 32% 11%;
+  --sidebar-foreground: 40 25% 90%;
+  --sidebar-muted: 200 12% 62%;
+  --sidebar-border: 200 22% 18%;
+  --sidebar-hover: 200 24% 16%;
+  --sidebar-active: 178 45% 22%;
+
+  --shadow: 200 40% 12%;
+  --glow-a: 178 64% 40%;
+  --glow-b: 32 92% 55%;
+
+  --radius: 0.9rem;
 }
 
 .dark {
-  --background: 224 71.4% 4.1%;
-  --foreground: 210 20% 98%;
+  --background: 200 26% 7%;
+  --foreground: 40 22% 92%;
 
-  --card: 224 71.4% 6%;
-  --card-foreground: 210 20% 98%;
+  --card: 200 22% 10%;
+  --card-foreground: 40 22% 92%;
 
-  --popover: 224 71.4% 6%;
-  --popover-foreground: 210 20% 98%;
+  --popover: 200 22% 10%;
+  --popover-foreground: 40 22% 92%;
 
-  --primary: 238.7 83.5% 66.7%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  --primary: 174 52% 50%;
+  --primary-foreground: 200 35% 8%;
 
-  --secondary: 217.2 32.6% 14%;
-  --secondary-foreground: 210 20% 98%;
+  --secondary: 200 18% 15%;
+  --secondary-foreground: 40 22% 92%;
 
-  --muted: 217.2 32.6% 14%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 200 18% 14%;
+  --muted-foreground: 200 10% 64%;
 
-  --accent: 217.2 32.6% 14%;
-  --accent-foreground: 210 20% 98%;
+  --accent: 200 18% 16%;
+  --accent-foreground: 40 22% 92%;
 
-  --destructive: 0 62.8% 50.6%;
-  --destructive-foreground: 210 20% 98%;
+  --highlight: 34 90% 60%;
+  --highlight-foreground: 30 60% 10%;
 
-  --success: 142.1 70.6% 45.3%;
-  --success-foreground: 144 61% 95%;
+  --destructive: 356 62% 56%;
+  --destructive-foreground: 40 40% 98%;
 
-  --warning: 38 92% 50%;
-  --warning-foreground: 48 96% 95%;
+  --success: 152 48% 48%;
+  --success-foreground: 152 60% 92%;
 
-  --info: 199 89% 48%;
-  --info-foreground: 200 98% 95%;
+  --warning: 36 90% 58%;
+  --warning-foreground: 36 90% 92%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 238.7 83.5% 66.7%;
+  --info: 188 60% 52%;
+  --info-foreground: 188 70% 92%;
+
+  --border: 200 16% 18%;
+  --input: 200 16% 21%;
+  --ring: 174 52% 50%;
+
+  --sidebar: 200 30% 5%;
+  --sidebar-foreground: 40 22% 90%;
+  --sidebar-muted: 200 10% 58%;
+  --sidebar-border: 200 20% 13%;
+  --sidebar-hover: 200 22% 11%;
+  --sidebar-active: 176 40% 16%;
+
+  --shadow: 200 50% 2%;
+  --glow-a: 174 52% 45%;
+  --glow-b: 34 90% 58%;
 }

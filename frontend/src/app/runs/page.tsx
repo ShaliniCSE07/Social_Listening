@@ -183,7 +183,7 @@ export default function RunsListPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          <h2 className="page-title">
             Collection Runs
           </h2>
           <p className="text-sm text-muted-foreground mt-1">

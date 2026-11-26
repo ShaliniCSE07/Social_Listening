@@ -15,7 +15,7 @@ Each line represents an individual collected mention (`RawMention` schema).
 | `schema_version` | `string` | Required | Schema version identifier (e.g. `"1.0"`). |
 | `company` | `string` | Required | Target company name. Non-empty string. |
 | `run_id` | `string` | Nullable | Unique identifier of the pipeline run. |
-| `platform` | `string` | Required | Standardized platform enum: `twitter_x`, `instagram`, `linkedin`, `reddit`, `google`, `facebook`, `news_blog`, `other`. |
+| `platform` | `string` | Required | Standardized platform enum: `twitter_x`, `instagram`, `linkedin`, `reddit`, `google`, `facebook`, `news_blog`, `tripadvisor`, `other`. |
 | `item_id` | `string` | Nullable | Platform-native unique item ID (e.g. tweet ID, post ID). May be `null` if unavailable. |
 | `url` | `string` | Nullable | Canonical web URL of the item or post. |
 | `branch` | `string` | Nullable | Physical branch / store location for local reviews (e.g. Google Places). |

@@ -11,6 +11,8 @@ from src.collection.base import BaseConnector, CollectionRequest
 from src.collection.budget import BudgetTracker
 from src.collection.executor import ExecutionResult, TaskOutcome, execute, write_outputs
 from src.collection.planner import InvalidCompany, Plan, Planner
+from src.collection.platform_filter import parse_platform_filter, prune_plan_tasks
+from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
 from src.collection.policy import load_scraping_sites_cfg
 from src.contracts.enums import AttemptStatus, Method, Platform
 from src.contracts.schemas import CollectionAttempt, RawMention
@@ -209,6 +211,30 @@ class RunRunner:
                 run_store.save_run_summary(run_id, summary)
                 return summary
 
+            # 2b. Platform filter: drop tasks that cannot yield the chosen platforms
+            # (before any connector runs, so no API quota is spent on them).
+            platform_filter = parse_platform_filter(request.platform_filter)
+            filter_skipped_attempts: List[CollectionAttempt] = []
+            if platform_filter.active:
+                for req in plan_obj.requests:
+                    req.platform_filter = list(platform_filter.requested)
+                removed = prune_plan_tasks(plan_obj, platform_filter, load_dataset_catalogue())
+                now_skip = datetime.now(timezone.utc)
+                for task, reason in removed:
+                    plan_obj.notes.append(reason)
+                    is_ds = getattr(task, "dataset_key", None) is not None
+                    filter_skipped_attempts.append(
+                        CollectionAttempt(
+                            company=task.company,
+                            platform=task.platform if isinstance(task.platform, Platform) else Platform.other,
+                            method=Method.dataset if is_ds else Method.api,
+                            status=AttemptStatus.skipped,
+                            reason=reason,
+                            started_at=now_skip,
+                            finished_at=now_skip,
+                        )
+                    )
+
             # 3. Agent planning decisions
             registry = (
                 ConnectorRegistryHelper(self.connector_classes)
@@ -233,6 +259,20 @@ class RunRunner:
                 policy=self.policy,
                 scraping_sites_cfg=sites_cfg,
             )
+
+            # 4b. Final platform check: drop anything a fallback or scraper
+            # brought in from a platform outside the filter.
+            removed_by_filter = 0
+            if platform_filter.active:
+                kept_mentions = [
+                    m for m in exec_result.mentions
+                    if platform_filter.allows_mention(
+                        m.platform, (m.raw_payload or {}).get("platform_mapped"), m.source
+                    )
+                ]
+                removed_by_filter = len(exec_result.mentions) - len(kept_mentions)
+                exec_result.mentions = kept_mentions
+                exec_result.attempts = filter_skipped_attempts + list(exec_result.attempts)
 
             # 5. Write artifacts under data/runs/<run_id>/ using write_outputs
             run_dir = run_store._get_run_dir(run_id)
@@ -355,8 +395,21 @@ class RunRunner:
                 "decisions": sanitized_decisions,
                 "invalid_companies": invalid_data,
             }
+            if platform_filter.active:
+                summary["platform_filter"] = {
+                    "requested": platform_filter.requested,
+                    "platforms": sorted(p.value for p in platform_filter.platforms),
+                    "free_text": sorted(platform_filter.free_text),
+                    "skipped_sources": [a.reason for a in filter_skipped_attempts],
+                    "removed_mentions": removed_by_filter,
+                }
 
-            if overall_status == "failed":
+            if platform_filter.active and not plan_obj.tasks:
+                summary["error"] = (
+                    f"None of the selected sources collect from: {platform_filter.describe()}. "
+                    "Choose sources for those platforms, or clear the platform filter."
+                )
+            elif overall_status == "failed":
                 failed_reasons = [
                     a.reason
                     for a in exec_result.attempts

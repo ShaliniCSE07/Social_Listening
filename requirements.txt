@@ -8,6 +8,8 @@ python-multipart==0.0.9
 python-dotenv
 pyyaml
 requests
+beautifulsoup4>=4.12
+playwright>=1.44
 pytest
 kaggle
 httpx

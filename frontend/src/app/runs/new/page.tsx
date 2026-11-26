@@ -39,6 +39,7 @@ import {
   type PlanResponse,
 } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import PlatformFilterPicker, { platformLabel } from "@/components/PlatformFilterPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -111,6 +112,7 @@ export default function NewRunWizardPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set());
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string>>(new Set());
   const [scrapingAllowed, setScrapingAllowed] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState<string[]>([]);
 
   // Step 3: Options
   const [budgetUsd, setBudgetUsd] = useState("");
@@ -311,6 +313,7 @@ export default function NewRunWizardPage() {
     if (maxAgeDays) payload.max_age_days = parseFloat(maxAgeDays);
     if (requireFresh) payload.require_fresh = true;
     if (refresh) payload.refresh = true;
+    if (platformFilter.length) payload.platform_filter = platformFilter;
 
     return payload;
   }, [
@@ -324,6 +327,7 @@ export default function NewRunWizardPage() {
     maxAgeDays,
     requireFresh,
     refresh,
+    platformFilter,
   ]);
 
   // Load plan preview on step 4
@@ -383,7 +387,7 @@ export default function NewRunWizardPage() {
     <div className="space-y-8" data-testid="new-run-wizard">
       {/* ── Header ── */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">
+        <h2 className="page-title">
           New Collection Run
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
@@ -618,6 +622,20 @@ export default function NewRunWizardPage() {
           {/* STEP 2: SOURCES */}
           {currentStep === 2 && (
             <div className="space-y-6" data-testid="step-sources">
+              {/* Platform filter */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Only collect from these platforms (optional)</CardTitle>
+                  <CardDescription>
+                    Pick where the reviews or posts must come from. Applies to APIs, datasets and scraping.
+                    Leave empty to collect everything.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PlatformFilterPicker value={platformFilter} onChange={setPlatformFilter} />
+                </CardContent>
+              </Card>
+
               {/* API Platforms */}
               <Card>
                 <CardHeader>
@@ -1063,6 +1081,38 @@ export default function NewRunWizardPage() {
                         </div>
                       ))}
                   </div>
+                </div>
+
+                {/* Platform filter Section */}
+                <div className="p-4 rounded-xl border border-border bg-card space-y-2" data-testid="review-platform-filter">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-foreground">Platform filter</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentStep(2)}
+                      className="text-xs text-primary h-7"
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {platformFilter.length
+                      ? `Only from: ${platformFilter.map(platformLabel).join(", ")}`
+                      : "All platforms"}
+                  </p>
+                  {(planData?.notes ?? [])
+                    .filter((n) => /platform filter|None of the selected sources collect/i.test(n))
+                    .map((n, i) => (
+                      <p
+                        key={i}
+                        className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5"
+                        data-testid="platform-filter-note"
+                      >
+                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        {n}
+                      </p>
+                    ))}
                 </div>
 
                 {/* Sources Section */}

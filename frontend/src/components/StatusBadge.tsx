@@ -27,16 +27,16 @@ const STATUS_CONFIG: Record<
   }
 > = {
   queued: {
-    bg: "bg-slate-100 dark:bg-slate-800",
-    text: "text-slate-700 dark:text-slate-300",
-    border: "border-slate-200 dark:border-slate-700",
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    border: "border-border",
     label: "Queued",
     icon: Clock,
   },
   running: {
-    bg: "bg-blue-50 dark:bg-blue-950/60",
-    text: "text-blue-700 dark:text-blue-300",
-    border: "border-blue-200 dark:border-blue-800",
+    bg: "bg-primary/10",
+    text: "text-primary",
+    border: "border-primary/30",
     label: "Running",
     icon: Loader2,
     pulse: true,
@@ -71,9 +71,9 @@ export default function StatusBadge({
 }: StatusBadgeProps) {
   const normStatus = (status || "").toLowerCase();
   const cfg = STATUS_CONFIG[normStatus] ?? {
-    bg: "bg-slate-100 dark:bg-slate-800",
-    text: "text-slate-700 dark:text-slate-300",
-    border: "border-slate-200 dark:border-slate-700",
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    border: "border-border",
     label: status,
     icon: HelpCircle,
   };

@@ -49,6 +49,7 @@ import ErrorBox from "@/components/ErrorBox";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
 import ProcessingGateway from "@/components/ProcessingGateway";
+import RatingSummaryCard from "@/components/RatingSummaryCard";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -254,6 +255,7 @@ export default function RunDetailPage() {
     if (lower === "scraping") return "Web Scraping";
     if (lower === "third_party_reddit") return "Third-Party Reddit";
     if (lower === "third_party_reviews") return "Third-Party Reviews";
+    if (lower === "third_party_tripadvisor") return "TripAdvisor (RapidAPI)";
     return name
       .split("_")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -295,6 +297,12 @@ export default function RunDetailPage() {
       (r.includes("credential") || r.includes("key") || r.includes("missing") || r.includes("places") || r.includes("denied"))
     ) {
       return "Add Google Places API key in .env, or choose a dataset.";
+    }
+    if (r.includes("rapidapi_key") || (r.includes("rapidapi") && (r.includes("rejected") || r.includes("not subscribed")))) {
+      return "Add RAPIDAPI_KEY in .env and subscribe to the API's plan on RapidAPI.";
+    }
+    if (r.includes("tripadvisor urls")) {
+      return "Add the company's TripAdvisor page URLs under api.tripadvisor_urls in companies.yaml.";
     }
     if (r.includes("budget") || r.includes("exhausted") || r.includes("exceeds")) {
       return "Increase run budget limit in Options, or choose free connectors.";
@@ -441,10 +449,10 @@ export default function RunDetailPage() {
 
       {/* ── Privacy Notice Card (only when scraping returned mentions) ── */}
       {hasScrapedMentions && (
-        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 shadow-sm" data-testid="privacy-notice-card">
+        <Card className="border-primary/25 bg-primary/5 shadow-none" data-testid="privacy-notice-card">
           <CardContent className="p-4 flex items-start gap-3">
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-            <div className="text-xs text-blue-900 dark:text-blue-200 space-y-0.5">
+            <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="text-xs text-foreground/80 space-y-0.5">
               <span className="font-semibold block">Privacy Notice</span>
               <p>
                 Scraped content can include usernames. Personal details are masked in the processing step before sharing.
@@ -529,12 +537,12 @@ export default function RunDetailPage() {
             <div className="mt-6 pt-4 border-t border-border space-y-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="h-2 w-2 rounded-full bg-highlight animate-pulse" />
                   Pipeline active — collecting live records…
                 </span>
                 <span>Polling every 3s</span>
               </div>
-              <Progress value={undefined} className="h-1.5 bg-blue-100 dark:bg-blue-950" />
+              <Progress value={undefined} className="h-1.5 bg-primary/15" />
             </div>
           )}
         </CardContent>
@@ -690,6 +698,33 @@ export default function RunDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Platform filter chosen for this run */}
+          {run.platform_filter && run.platform_filter.requested?.length > 0 && (
+            <Card data-testid="run-platform-filter">
+              <CardContent className="p-4 space-y-1.5 text-sm">
+                <p>
+                  <span className="font-medium">Platform filter:</span>{" "}
+                  only from {run.platform_filter.requested.join(", ")}
+                </p>
+                {run.platform_filter.skipped_sources?.map((s, i) => (
+                  <p key={i} className="text-xs text-muted-foreground">{s}</p>
+                ))}
+                {run.platform_filter.removed_mentions > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {run.platform_filter.removed_mentions} collected items from other platforms were dropped.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Amazon-style star-rating breakdown (any plugin that returns ratings) */}
+          <RatingSummaryCard
+            runId={run.id}
+            runStatus={run.status}
+            mentionsCount={run.counts?.mentions_count ?? 0}
+          />
 
           {/* "How each source was collected" Card */}
           {run.task_outcomes && run.task_outcomes.length > 0 && (

@@ -43,3 +43,34 @@ Run live integration test (requires real credentials set in environment):
 ```bash
 python -m pytest tests/collection/api/test_reddit_api.py -m live -v
 ```
+
+## TripAdvisor reviews (RapidAPI)
+
+`TripadvisorReviewsConnector` (`third_party_tripadvisor`, platform `tripadvisor`) reads reviews through the
+RapidAPI listing **Tripadvisor Reviews Scraper**. This is a third-party scraper sold on RapidAPI, not an
+official TripAdvisor API. The shared RapidAPI client lives in `src/collection/common/rapidapi.py`, so other
+RapidAPI listings can reuse the same key, headers, error handling and quota reading.
+
+Setup:
+1. On rapidapi.com, subscribe to a plan of *Tripadvisor Reviews Scraper* (Basic is free: 10 requests/month, hard limit).
+2. Put your RapidAPI key in `.env`: `RAPIDAPI_KEY=...` (one key covers every RapidAPI listing).
+3. List each company's TripAdvisor pages in `config/companies.yaml`:
+   ```yaml
+   Delhi Highway:
+     api:
+       tripadvisor_urls:
+         - "https://www.tripadvisor.com/Restaurant_Review-g304554-d20328639-Reviews-Delhi_Highway-Mumbai_Maharashtra.html"
+   ```
+
+How it collects:
+- One request per page URL, up to 20 newest reviews each (`max_reviews_per_place`), at most
+  `max_places_per_run` pages per run.
+- A run's `date_from` is sent as `reviewsSince`; `date_to` is applied to the results.
+- Results are cached for `cache_ttl_days` (default 1) so re-runs do not spend quota; a run with `refresh` skips the cache.
+- HTTP 429 → `rate_limited`; 401/403 → `failed` (key rejected or not subscribed). Retries are off by default
+  because each retry spends quota.
+- Each review is a `RawMention` with `content_type_hint=review`, `item_id=reviewId`, `url` = review URL,
+  `branch` = place name, and the full review object in `raw_payload` plus `source_match_basis: "place_page"`,
+  which tells processing the review belongs to the company because it came from the company's own page.
+
+Tests: `python -m pytest tests/collection/api/test_tripadvisor_reviews.py tests/collection/shared/test_rapidapi_client.py -v`

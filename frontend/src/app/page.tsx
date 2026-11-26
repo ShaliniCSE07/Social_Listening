@@ -88,7 +88,7 @@ export default function DashboardPage() {
       {/* Top Banner / Welcome */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h2 className="page-title sm:text-[2.1rem]">
             Social Listening Dashboard
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -113,7 +113,9 @@ export default function DashboardPage() {
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Total Runs
             </CardTitle>
-            <Layers className="h-4 w-4 text-muted-foreground" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Layers className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -135,7 +137,9 @@ export default function DashboardPage() {
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Total Mentions
             </CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <MessageSquare className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -157,7 +161,9 @@ export default function DashboardPage() {
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Total Spend
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <DollarSign className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -179,7 +185,9 @@ export default function DashboardPage() {
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Completion Rate
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
             {loading ? (

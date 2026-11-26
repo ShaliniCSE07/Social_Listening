@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from src.collection.agent import plan_decisions
 from src.collection.budget import BudgetTracker
 from src.collection.planner import Planner
+from src.collection.platform_filter import parse_platform_filter, prune_plan_tasks
 from src.collection.plugins.dataset.catalogue import load_dataset_catalogue
 from src.collection.policy import load_scraping_sites_cfg
 from src.contracts.enums import Platform
@@ -17,9 +18,11 @@ from src.service.models import (
     CreateRunResponse,
     PaginatedMentionsResponse,
     PlanResponse,
+    RatingSummaryResponse,
     RunDetailResponse,
     RunListItem,
 )
+from src.reporting.rating_summary import summarize_ratings
 from src.service.run_store import run_store
 from src.service.runner import default_runner, sanitize_obj
 
@@ -66,6 +69,15 @@ def _generate_plan(request: CreateRunRequest) -> PlanResponse:
 
     planner = Planner()
     plan_obj = planner.plan(planner_input)
+
+    platform_filter = parse_platform_filter(request.platform_filter)
+    if platform_filter.active:
+        for task, reason in prune_plan_tasks(plan_obj, platform_filter, load_dataset_catalogue()):
+            plan_obj.notes.append(reason)
+        if not plan_obj.tasks:
+            plan_obj.notes.append(
+                f"None of the selected sources collect from: {platform_filter.describe()}"
+            )
 
     tracker = BudgetTracker(limit_usd=request.budget_usd) if request.budget_usd is not None else None
     sites_cfg = load_scraping_sites_cfg()
@@ -239,6 +251,22 @@ def get_run_mentions(
             detail=f"Run '{run_id}' not found",
         )
     return PaginatedMentionsResponse(**res)
+
+
+@router.get("/{run_id}/ratings", response_model=RatingSummaryResponse)
+def get_run_ratings(
+    run_id: str,
+    company: Optional[str] = Query(None, description="Only count mentions for this company"),
+    platform: Optional[str] = Query(None, description="Only count mentions from this platform"),
+) -> RatingSummaryResponse:
+    """Amazon-style star breakdown: % of rated mentions at each star level, overall and per platform."""
+    mentions = run_store.get_all_mentions(run_id, company=company, platform=platform)
+    if mentions is None or not run_store.get_run(run_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+    return RatingSummaryResponse(**summarize_ratings(mentions))
 
 
 @router.get("/{run_id}/download")

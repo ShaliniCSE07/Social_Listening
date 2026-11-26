@@ -7,6 +7,7 @@ from src.service.models import HealthResponse
 from src.service.processing_gateway import mount_processing_routes
 from src.service.routes.config import router as config_router
 from src.service.routes.processing import router as processing_router
+from src.service.routes.review_scraper import router as review_scraper_router
 from src.service.routes.runs import plan_router, router as runs_router
 
 app = FastAPI(
@@ -32,6 +33,7 @@ app.include_router(config_router)
 app.include_router(plan_router)
 app.include_router(processing_router)
 app.include_router(runs_router)
+app.include_router(review_scraper_router)
 
 # Serve the processing API (Member 2: /process, /runs/{id}/records, rerun) from
 # this same backend so the processing dashboard works alongside collection.

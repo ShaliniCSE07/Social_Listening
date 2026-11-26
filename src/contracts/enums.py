@@ -9,6 +9,7 @@ class Platform(str, Enum):
     google = "google"
     facebook = "facebook"
     news_blog = "news_blog"
+    tripadvisor = "tripadvisor"
     other = "other"
 
 

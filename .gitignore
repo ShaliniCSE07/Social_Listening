@@ -24,3 +24,10 @@ data/datasets/_downloads/
 data/runs/
 
 >>>>>>> 1f257a10c35be61cb9425dd658e6da1be39b8e51
+
+# Local browser for the review scraper and local caches (kept on D:)
+.playwright/
+.cache/
+
+# Web Scraper output (one folder per scrape)
+data/review_scrapes/

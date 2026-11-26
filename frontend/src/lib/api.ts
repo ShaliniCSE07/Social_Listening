@@ -59,6 +59,8 @@ export interface CreateRunRequest {
   require_fresh?: boolean;
   refresh?: boolean;
   scraping_allowed?: boolean;
+  /** Only collect from these platforms (empty/omitted = all). */
+  platform_filter?: string[];
 }
 
 export interface CreateRunResponse {
@@ -152,6 +154,13 @@ export interface RunDetailResponse {
   task_outcomes?: TaskOutcomeItem[] | null;
   decisions?: PlanDecision[] | null;
   invalid_companies?: InvalidCompanyItem[] | null;
+  platform_filter?: {
+    requested: string[];
+    platforms: string[];
+    free_text: string[];
+    skipped_sources: string[];
+    removed_mentions: number;
+  } | null;
 }
 
 export interface CompactMention {
@@ -417,4 +426,102 @@ export async function startRunProcessing(runId: string): Promise<RunProcessingSt
   return apiFetch<RunProcessingState>(`/api/runs/${encodeURIComponent(runId)}/process`, {
     method: "POST",
   });
+}
+
+// ── Star-rating summary (Amazon-style breakdown) ──
+
+export interface StarBucket {
+  stars: number;
+  count: number;
+  percent: number;
+}
+
+export interface RatingBreakdown {
+  total_mentions: number;
+  rated_count: number;
+  unrated_count: number;
+  average: number | null;
+  distribution: StarBucket[];
+}
+
+export interface RatingSummaryResponse extends RatingBreakdown {
+  by_platform: Record<string, RatingBreakdown>;
+}
+
+export async function getRatingSummary(
+  runId: string,
+  params?: { company?: string; platform?: string }
+): Promise<RatingSummaryResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.company) searchParams.set("company", params.company);
+  if (params?.platform) searchParams.set("platform", params.platform);
+  const qs = searchParams.toString();
+  return apiFetch<RatingSummaryResponse>(
+    `/api/runs/${encodeURIComponent(runId)}/ratings${qs ? `?${qs}` : ""}`
+  );
+}
+
+// ── Stand-alone review scraper (URL in, mentions.jsonl out) ──
+
+export interface ScrapedReview {
+  text: string;
+  title?: string | null;
+  rating?: number | null;
+  /** thumbs up/down sites (e.g. Steam): true = Recommended, false = Not recommended */
+  recommended?: boolean | null;
+  author?: string | null;
+  date?: string | null;
+  url?: string | null;
+  extraction_method: string;
+}
+
+export interface ScrapeJob {
+  job_id: string;
+  status: "completed" | "empty" | "failed" | string;
+  url: string;
+  company: string;
+  created_at: string;
+  reviews_count: number;
+  pages_fetched: number;
+  methods: Record<string, number>;
+  warnings: string[];
+  error?: string | null;
+  download_url: string;
+  mode_requested?: ScrapeMode;
+  mode_used?: "static" | "browser" | string;
+  reviews?: ScrapedReview[] | null;
+}
+
+/** auto: page HTML first, browser only if needed; static: HTML only; browser: always run JavaScript */
+export type ScrapeMode = "auto" | "static" | "browser";
+
+export interface ScraperCapabilities {
+  browser_available: boolean;
+  browser_reason: string;
+}
+
+export async function getScraperCapabilities(): Promise<ScraperCapabilities> {
+  return apiFetch<ScraperCapabilities>("/api/review-scraper/capabilities");
+}
+
+export async function scrapeReviews(data: {
+  url: string;
+  company?: string;
+  max_pages?: number;
+  max_reviews?: number;
+  mode?: ScrapeMode;
+}): Promise<ScrapeJob> {
+  return apiFetch<ScrapeJob>("/api/review-scraper", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function getScrapeJobs(): Promise<ScrapeJob[]> {
+  return apiFetch<ScrapeJob[]>("/api/review-scraper");
+}
+
+export async function getScrapeJob(jobId: string): Promise<ScrapeJob> {
+  return apiFetch<ScrapeJob>(`/api/review-scraper/${encodeURIComponent(jobId)}`);
+}
+
+export function getScrapeDownloadUrl(job: ScrapeJob): string {
+  return `${getApiBaseUrl().replace(/\/$/, "")}${job.download_url}`;
 }
